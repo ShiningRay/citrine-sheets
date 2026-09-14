@@ -46,7 +46,7 @@ module Sheets
 
       rounded = Num.round_to(value.to_f, 6)
       if Num.integral?(rounded)
-        Num.to_int(rounded).to_s
+        Num.round(rounded).to_s
       else
         text = rounded.to_s
         text = text.sub(/(\.\d*?)0+\z/, '\1').sub(/\.\z/, "")
@@ -100,7 +100,7 @@ module Sheets
       return exponent(value) if abs >= 1e15 || (abs < 1e-9 && !value.zero?)
 
       if Num.integral?(value)
-        grouped(Num.to_int(value))
+        grouped(Num.round(value))
       else
         fixed(Num.round_to(value, 2), 2).sub(/(\.\d*?)0+\z/, '\1').sub(/\.\z/, "")
       end
@@ -116,7 +116,7 @@ module Sheets
       return "" if value.nil?
       return value.code if value.is_a?(ErrorValue)
 
-      Num.integral?(value) ? Num.to_int(value).to_s : Num.round_to(value.to_f, 3).to_s
+      Num.integral?(value) ? Num.round(value).to_s : Num.round_to(value.to_f, 3).to_s
     end
   end
 end
