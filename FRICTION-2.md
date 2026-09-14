@@ -254,7 +254,8 @@ on_mount :setup_view_state, :start_ticker   # 想注册两个
 CRuby 单测 + Opal 桩两侧现在一致。框架 README 的「跨平台语义陷阱」新增第 10 条记录
 这条 Opal 特性本身（"给固定 arity 的方法多传实参不报错、只是丢弃"，别指望多传会报错）。
 
-顺带：**执行顺序 = 声明顺序**已写进框架文档（本仓库依赖"先建视图态订阅、再起 ticker"）。
+顺带：**执行顺序 = 声明顺序**已写进框架文档（本仓库当时依赖"先建视图态订阅、再起 ticker"；
+citrine #23 起视图态订阅改用 `watch`，watch 体在**全部 on_mount 之后**创建，这项顺序依赖随之消失）。
 
 ### G-13. 嵌套块里的**外层局部变量**是陈旧快照（块级重建模型的固有语义）
 
@@ -470,8 +471,8 @@ box(
 - 从前 `Application` 持有 1560+ 个视图信号并**主动 push** 增量
   （`publish_selection_delta` / `flash_cells` / `tick_visuals`）；
   现在 `Application` 只发布**数据层事实**（选区信号 + `flash` 信号里的"本轮哪些格变了"），
-  由 `GridPanel` 订阅并翻译成逐格视图信号（`setup_view_state` 里两个 `Effect`，
-  随 `on_mount`/`on_unmount` 起停）
+  由 `GridPanel` 订阅并翻译成逐格视图信号（两个 `watch` 声明，
+  挂载后建立、卸载时由框架 dispose）
 - 埋点里的"信号对象数"仍要跨组件汇总：面板在分配视图信号时把总数报给 `Telemetry`，
   根组件读它（`Application#signal_count`）；"闪烁格数"这类**视图态**则从 DOM 现取
   （`sheetsTestApi.state()` 追加 `.cell.is-flash` 计数）——测试断言反而更接近用户所见

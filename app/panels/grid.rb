@@ -139,16 +139,11 @@ module Sheets
       # Application 只发布数据层的变化（选区信号 + 本轮哪些格显示变了），
       # 由本面板翻译成逐格视图信号。逐格信号是更新粒度的关键——
       # 若换成"一个全局选区信号 + 每格读它"，移动选区会让 1560 个格子全部重跑属性。
+      #
+      # 两个订阅本身用 `watch` 声明（见 GridPanel）：挂载后各跑一次、依赖变了重跑，
+      # 卸载时由框架 dispose。
 
-      def setup_view_state
-        @selection_watch = Citrine::Effect.create { sync_selection(app.selection.get) }
-        @flash_watch = Citrine::Effect.create { sync_flash(app.flash.get) }
-      end
-
-      def teardown_view_state
-        [@selection_watch, @flash_watch].each { |effect| effect&.dispose }
-        @selection_watch = nil
-        @flash_watch = nil
+      def reset_view_metrics
         Sheets::Telemetry.view_signals = 0
       end
 
@@ -261,7 +256,8 @@ module Sheets
     # 全局键盘与定时器在这里落地（G-9 / G-10）：
     #   · window_key  —— window 级 keydown，随组件卸载自动解绑（从前是外挂层自己
     #     持 window 引用 + beforeunload 清理）
-    #   · on_mount/on_unmount —— 定时器与视图态订阅的起与停交给框架生命周期
+    #   · on_mount/on_unmount —— 定时器的起与停交给框架生命周期
+    #   · watch       —— 视图态订阅；挂载后建立、卸载时框架自动 dispose（citrine #23）
     # 键盘逻辑本身仍归 Application（它才是选区/编辑状态的持有者），组件只负责"绑"。
     class GridPanel < Panel
       include Grid
@@ -269,12 +265,20 @@ module Sheets
       TICK_MS = 110
 
       window_key :global_key
-      # 钩子按声明顺序执行；一次声明多个或分多次声明都可以（citrine #19 起可变参数），
-      # 顺序必须是"先建视图态订阅、再起 ticker"，反之停的时候要对调
-      on_mount :setup_view_state
+
+      # 视图态订阅（选中 / 闪烁）：watch 体各自一个 Effect，挂载后跑一次、
+      # 它读到的信号一变就重跑，卸载时框架先 dispose 订阅、再跑清理钩子（citrine #23）。
+      #
+      # 与挂载钩子的先后：watch 在**全部 on_mount 之后**创建，所以现在是 ticker 先起、
+      # 订阅后建（从前靠声明顺序写死"先订阅、再起 ticker"）。两者都发生在同一次同步挂载里，
+      # 定时器回调插不进来，首屏高亮与闪烁清理的时序不变。
+      watch { sync_selection(app.selection.get) }
+      watch { sync_flash(app.flash.get) }
+
+      # 钩子按声明顺序执行；一次声明多个或分多次声明都可以（citrine #19 起可变参数）
       on_mount :start_ticker
       on_unmount :stop_ticker
-      on_unmount :teardown_view_state
+      on_unmount :reset_view_metrics
 
       def view
         render_grid

@@ -196,8 +196,8 @@ module Sheets
 
     # initial 为 nil 表示编辑现有内容；传字符串表示"直接输入"（覆盖原内容）
     #
-    # 焦点不在这里安排：编辑态是**公式栏自己的视图关注点**，它订阅 edit_mode 决定
-    # 何时 focus/blur 自己的输入框（见 FormulaBar#watch_edit_mode）。
+    # 焦点不在这里安排：编辑态是**公式栏自己的视图关注点**，它用 watch 订阅 edit_mode
+    # 决定何时 focus/blur 自己的输入框（见 FormulaBar#sync_focus_to_edit_mode）。
     def start_edit(initial = nil)
       text = initial.nil? ? (@workbook.raw(@r2, @c2) || "").to_s : initial.to_s
       @edit_text.set(text)

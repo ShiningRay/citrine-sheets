@@ -9,15 +9,16 @@ module Sheets
     # 公式栏：左侧显示当前地址，中间是编辑框，右侧是确认/取消。
     #
     # 编辑态与焦点是**本面板自己的视图关注点**：进入编辑态就把焦点送进输入框、
-    # 离开就 blur（见 watch_edit_mode）。从前这是"Application 反向持有组件引用"的
+    # 离开就 blur（见 sync_focus_to_edit_mode）。从前这是"Application 反向持有组件引用"的
     # 绕法（挂着 G-10/F7 的名），现在面板用 refs + 生命周期自己管——
     # 输入框所在的块也**不需要**再靠"永不重建"来保住焦点了：面板是 keyed 复用的
     # 子组件，结构变化只会移动/更新节点（F5/F6 已落地）。
     class FormulaBar < Panel
       include Common
 
-      on_mount :watch_edit_mode
-      on_unmount :stop_watching
+      # 声明即完整（citrine #23 的 watch 宏）：挂载后跑一次，之后 edit_mode 一变就重跑，
+      # 卸载时框架自动 dispose——不必再手写 on_mount :setup + on_unmount :teardown 那对样板。
+      watch :sync_focus_to_edit_mode
 
       def view
         panel("panel-formula") do
@@ -51,15 +52,11 @@ module Sheets
 
       # ── 编辑态 → 焦点（本面板订阅共享的编辑状态）──────────────
       #
-      # 焦点是"看一个信号、不渲染"的场景，所以是一个独立的 Effect（框架还没有
-      # effect/watch 宏）：挂载时建立、卸载时 dispose，复用（keyed）时不重建。
-      def watch_edit_mode
-        @edit_watch = Citrine::Effect.create { sync_focus(app.edit_mode.get) }
-      end
-
-      def stop_watching
-        @edit_watch&.dispose
-        @edit_watch = nil
+      # 焦点是"看一个信号、不渲染"的典型副作用：watch 体跑在**自己的 Effect** 里，
+      # 块内读到的 edit_mode 才是依赖；refs[:input] 挂载完成后才登记，
+      # 所以在这里现取（watch 在 mount 钩子之后创建）。
+      def sync_focus_to_edit_mode
+        sync_focus(app.edit_mode.get)
       end
 
       def sync_focus(editing)

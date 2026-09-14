@@ -8,7 +8,7 @@
 # 之后都有了框架入口（G-9 / G-10）：
 #   · 全局键盘      → GridPanel 的 `window_key :global_key`
 #   · 定时器        → GridPanel 的 `on_mount` / `on_unmount`
-#   · 原生焦点      → FormulaBar 自己订阅 edit_mode（`refs[:input]` + 一个 Effect）
+#   · 原生焦点      → FormulaBar 用 `watch` 订阅 edit_mode（`refs[:input]` + 一个 Effect）
 #   · 输入框内按键  → FormulaBar 的 `on_key: { "Escape" => …, "Tab" => … }`
 # 只剩这个"给无头测试用"的钩子没有框架形态，留在这里。
 require "native"
