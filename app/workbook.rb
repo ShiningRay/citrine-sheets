@@ -25,6 +25,7 @@ module Sheets
   #   外观信号 → 仅选中/格式/错误态变化时发；订阅它的块会重建该格（1~2 个节点）
   # v1 没有 keyed 复用与 props 热更新，"更新频率"只能由信号边界表达。
   class Workbook
+    include Citrine::Reactive
     DEFAULT_ROWS = 60
     DEFAULT_COLS = 26
     UNDO_LIMIT = 60
@@ -32,7 +33,7 @@ module Sheets
     def initialize(rows: DEFAULT_ROWS, cols: DEFAULT_COLS)
       # 行列数是**结构信号**：网格的行/列结构块读它，行列数一变就重跑结构块，
       # 由 keyed 复用把已有行/列/单元格原地保留（只新建真正新增的那些）。
-      @dims = Citrine::Signal.new({ rows: rows, cols: cols })
+      @dims = signal({ rows: rows, cols: cols })
       @raw = {}         # [row, col] => 原始输入文本
       @ast = {}         # [row, col] => AST（公式格）
       @values = {}      # [row, col] => 计算值
@@ -45,7 +46,7 @@ module Sheets
       @redo = []
       @edit_seq = 0
       @last_recalc = empty_report
-      @recalc_signal = Citrine::Signal.new(@last_recalc)
+      @recalc_signal = signal(@last_recalc)
     end
 
     # ── 读取 ────────────────────────────────────────────────
@@ -142,11 +143,11 @@ module Sheets
     end
 
     def value_signal(row, col)
-      @value_signals[[row, col]] ||= Citrine::Signal.new(snapshot(row, col))
+      @value_signals[[row, col]] ||= signal { snapshot(row, col) }
     end
 
     def chrome_signal(row, col)
-      @chrome_signals[[row, col]] ||= Citrine::Signal.new(chrome_state(row, col))
+      @chrome_signals[[row, col]] ||= signal { chrome_state(row, col) }
     end
 
     def signal_count

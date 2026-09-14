@@ -352,10 +352,11 @@ module Sheets
 
     private
 
-    # 应用级信号集中登记：埋点面板要报告"信号对象数"，写死个数容易与实现漂移
-    # （名字不叫 signal：那是框架给 state 宏取值信号的入口）
+    # 应用级信号集中登记：埋点面板要报告"信号对象数"，写死个数容易与实现漂移。
+    # 这里用 Citrine.signal 而不是裸 signal：组件里 `signal(name)` 是框架"取 state 底层信号"
+    # 的入口，同名会把它盖掉；Citrine.signal 顺带也避免了裸写 Signal 撞 stdlib 的坑（F14）。
     def own_signal(value)
-      (@signals ||= []) << Citrine::Signal.new(value)
+      (@signals ||= []) << Citrine.signal(value)
       @signals.last
     end
 

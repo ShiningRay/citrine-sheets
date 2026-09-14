@@ -234,30 +234,25 @@ module Sheets
       end
 
       def view_signal(row, col)
-        @view_state ||= {}
-        memo_view_signal(@view_signals ||= {}, [row, col], { selected: false, flash: false })
+        keyed_signal(:view, [row, col]) { { selected: false, flash: false } }.tap { report_view_signals }
       end
 
       def row_signal(index)
-        memo_view_signal(@row_signals ||= {}, index, false)
+        keyed_signal(:row, index) { false }.tap { report_view_signals }
       end
 
       def col_signal(index)
-        memo_view_signal(@col_signals ||= {}, index, false)
+        keyed_signal(:col, index) { false }.tap { report_view_signals }
       end
 
-      # 逐格视图信号：只有在新建时才把总数报给埋点（"信号对象数"是应用级指标）
-      def memo_view_signal(store, key, initial)
-        signal = store[key]
-        return signal if signal
-
-        store[key] = Citrine::Signal.new(initial)
+      # "信号对象数"是应用级指标（埋点面板读 Telemetry.view_signals）：
+      # 逐格信号由框架的 keyed_signal 按 key 记忆，这里只统计表的大小。
+      def report_view_signals
         Sheets::Telemetry.view_signals = view_signal_count
-        store[key]
       end
 
       def view_signal_count
-        (@view_signals&.size || 0) + (@row_signals&.size || 0) + (@col_signals&.size || 0)
+        keyed_signals.values.sum(&:size)
       end
     end
 
