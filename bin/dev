@@ -1,0 +1,24 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# 开发服务器启动器：包装 citrine 自带的 dev server，指向本仓库的 app/ 目录。
+#
+#   bin/dev              # http://localhost:4404/sheets.html
+#   bin/dev -p 5000      # 换端口
+#
+# 热刷新范围：citrine 的 lib/**/*.rb 与本仓库 app/**/*.rb，任一处保存都会
+# 触发浏览器整页刷新（编译错误会以红色浮层显示在页面顶部）。
+root = File.expand_path("..", __dir__)
+citrine_root = ENV["CITRINE_ROOT"] || File.expand_path("../citrine", root)
+lib = File.join(citrine_root, "lib")
+
+unless File.directory?(lib)
+  abort <<~MSG
+    找不到 citrine 框架：#{citrine_root}
+    请把本仓库与 citrine 仓库放在同一父目录下，或设置：
+      export CITRINE_ROOT=/path/to/citrine
+  MSG
+end
+
+require File.join(lib, "citrine/dev_server")
+Citrine::DevServer.run!([File.join(root, "app"), "-p", "4404", *ARGV])

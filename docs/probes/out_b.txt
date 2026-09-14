@@ -1,0 +1,98 @@
+
+=== 问题 1：事件绑定矩阵（谁绑上了、谁被静默丢弃） ===
+<DIV class=""> ev=[<无>] text=""
+  <DIV class="container"> ev=[click] text=""
+    <P class="lbl"> ev=[click] text="L"
+    <BUTTON class="btn"> ev=[click] text="B"
+    <INPUT class="ti"> ev=[click,input,keydown] text="" value="" checked=false
+    <INPUT class="cb"> ev=[click,change] text="" value="" checked=true
+派发 5 个 click 后 TRACE = ["box_click", "label_click", "btn_click", "ti_click", "cb_click"]
+check_box 派发 change 后 TRACE = ["cb_change()"]
+text_input 派发 input 后 TRACE = []（input 无 handler；value 信号被写入）
+text_input keydown Enter 后 TRACE = ["ti_enter"]
+text_input Escape / 普通键 / blur / focus 后 TRACE = []
+在 box/label/button 上派发 change 后 TRACE = []
+
+=== 问题 4：block 返回非 String（DOM 侧） ===
+<DIV class=""> ev=[<无>] text=""
+  <DIV class=""> ev=[<无>] text=""
+    <P class="int"> ev=[<无>] text=""
+    <P class="nil"> ev=[<无>] text=""
+    <P class="calc"> ev=[<无>] text=""
+    <P class="ok"> ev=[<无>] text="n=3"
+  label{42} textContent: ""
+  label{42} 的子树/属性: 空 <p>，无任何 JS 报错（stderr 干净）
+
+=== 问题 5：批量更新（DOM 侧 createElement 计数） ===
+初始 createElement 调用数 = 18
+一次用户操作（handler 内改 a,b,c 三个信号）：createElement 增量 = 15
+  dynamic 块子节点数（应 5）: 5
+  dynamic 块文本: 0:3 | 1:3 | 2:3 | 3:3 | 4:3
+  sum 文本: sum=3
+再连续两次 hit：createElement 增量 = 30（每次 hit 仍是 3 轮 × 5 节点）
+  监听器绑定累计次数: 8
+
+=== 问题 6 + 2：列表行内局部状态（陷阱 vs 绕过） ===
+  第 2 行 input 初始 value: "beta-draft"
+  用户输入后 value: "我输入的内容"
+  add_item 后 createElement 增量: 12
+  第 2 行 input 是新对象?: true
+  旧 input 已从树摘除(parentElement==null): true
+  新 input 的 value: "beta-draft"   ← 用户输入丢失
+  旧 input 仍保留的监听器: input
+  行 DOM 身份: 全部 3 行都是新元素（无 keyed 复用）
+  再加一项 createElement 增量: 15
+  第 2 行 label 初始: "beta: \"\""
+  输入后（只 set 那一个行信号）createElement 增量: 0
+  同行 label 文本: beta: "我输入的内容"
+  input 元素身份保持: true
+  input.value: "我输入的内容"   ← 未被框架覆盖
+  再次 set 同一行信号 createElement 增量: 0
+  label / input 同步: beta: "再改一次" / "再改一次"
+  ★ 改 items（重建列表）后：行元素全换新，但值从 per-row Signal 恢复 → input.value: "再改一次"
+     createElement 增量: 12
+
+=== 问题 7：键盘/焦点 —— 框架外 backtick JS 绕过 ===
+<DIV class=""> ev=[<无>] text=""
+  <DIV class="spike"> ev=[<无>] text=""
+    <INPUT class="spike-input"> ev=[input,blur,keydown] text="" value="" checked=false
+    <P class="spike-label"> ev=[<无>] text="text="
+  手动绑定的 blur / Escape 触发结果: ["manual_blur", "manual_keydown:Escape"]
+  代价 1：需要拿到 node.dom（DSL 返回值）+ Opal Native/backtick: 上面 3 行代码里混入了 JS
+  代价 2：框架不知道自己绑了这些监听器: renderer.rb#dispose 只处理 node.owned_effects
+  ★ 输入触发重建 → 框架崩溃: NoMethodError: undefined method `each' for nil
+  （这不是探针的错，见 probe_c_crash.rb 的最小复现）: 崩溃点：Signal#set 遍历 @subs.dup 陈旧快照
+  重跑后 input 是否换对象（旧元素被销毁）: true
+  旧 input 已摘除: true
+  旧 input 上的 blur 监听器数量: 1
+  手动 fire 已被摘除的旧元素的 blur: ["manual_blur"]   ← 监听器 + 闭包仍存活（泄漏）
+
+=== 问题 8：定时器 / 外部资源 与 dispose ===
+  点击 start 后注册的 interval 数: 1
+  clearInterval 被调用次数（框架内）: 0
+  手动 tick 两次后 label: ticks=2
+  组件可见的生命周期方法: Component 实例方法: ["box", "button", "check_box", "computation", "computations", "emit", "handle_event", "initialize", "label", "props", "signal", "signals", "text_input", "view"]
+  是否有 on_mount/on_unmount/effect/watch: {"on_mount"=>false, "on_unmount"=>false, "unmount"=>false, "effect"=>false, "watch"=>false, "dispose"=>false}
+  调用 renderer.send(:dispose, root) 后：DOM 是否清空: 1
+  销毁后 interval 回调再执行一次: ticks = 3（无人 clearInterval → 泄漏）
+  销毁后 signal 还在被写: 是，且已无订阅者（静默）
+  销毁后直接写信号: 无异常，无渲染（silent no-op）
+
+=== 问题 10：DOM 侧的静默失败 + 渲染期异常 ===
+<DIV class=""> ev=[<无>] text=""
+  <DIV class="silent"> ev=[<无>] text=""
+    <P class="s1"> ev=[<无>] text="n=0"
+    <INPUT class="s2"> ev=[<无>] text="" value="" checked=false
+    <INPUT class="s3"> ev=[change] text="" value="" checked=true
+    <BUTTON class="s4"> ev=[click] text="boom"
+  style {width: 18} → el.style["width"]: "18"  ← 赋给 CSSOM 的是字符串 "18"
+  style {font_wieght: "600"} → el.style["fontWieght"]: nil
+  style {font_size: 15} → el.style["fontSize"]: "15"
+  text_input(value: 字面量) 的 DOM value: ""  ← 字面量被丢弃（只接受 Signal）
+  check_box(checked: signal) 的 checked: true  ← Signal 对象恒真
+  拼错事件名的绑定情况: <无> / change
+  点击 on_click: :never_defined_method: NoMethodError: undefined method `never_defined_method' for #<SilentWidget:0x968 @props={} @signals={"n"=>#<Citrine::Signal:0x99e @value=0 @subs=[#<Citrine::Effect:0x99c @block=#<Proc:0x9d2> @deps=[#<Citrine::Signal:0x99e>]>]>}>
+  挂载 ExplodingView → 抛出 ArgumentError: view 中途爆炸（模拟拼错方法名）
+  异常后页面处于半渲染态: 剩余节点数 = 3
+  树内容: <DIV class=""> ev=[<无>] text="" /   <DIV class="boom"> ev=[<无>] text="" /     <P class="b1"> ev=[<无>] text="x=1"
+  挂载失败后 set 信号 x: 无异常（孤儿 Effect 仍订阅着？）

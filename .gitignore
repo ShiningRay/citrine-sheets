@@ -1,0 +1,6 @@
+# 编译产物（开发时由 dev server 现场编译，不进版本库）
+/app/sheets.js
+/app/*.js.map
+
+# 系统
+.DS_Store

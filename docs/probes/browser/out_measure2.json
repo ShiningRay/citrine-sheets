@@ -1,0 +1,19 @@
+{
+ "before": {
+  "app5": "&lt;div class=\"mini\" style=\"display: flex;\"&gt;&lt;div class=\"mini-item\" style=\"display: flex;\"&gt;&lt;p&gt;a0&lt;/p&gt;&lt;/div&gt;&lt;button class=\"mini-btn\"&gt;add&lt;/button&gt;&lt;/div&gt;",
+  "app6": "&lt;div class=\"mini\" style=\"display: flex;\"&gt;&lt;div class=\"mini-item\" style=\"display: flex;\"&gt;&lt;p&gt;a0&lt;/p&gt;&lt;/div&gt;&lt;button class=\"mini-btn\"&gt;add&lt;/button&gt;&lt;/div&gt;"
+ },
+ "after_click_app5": {
+  "html": "&lt;div class=\"mini\" style=\"display: flex;\"&gt;&lt;/div&gt;",
+  "errors": [
+   "Uncaught children: undefined method `children' for nil"
+  ],
+  "app6_html": "&lt;div class=\"mini\" style=\"display: flex;\"&gt;&lt;div class=\"mini-item\" style=\"display: flex;\"&gt;&lt;p&gt;a0&lt;/p&gt;&lt;/div&gt;&lt;button class=\"mini-btn\"&gt;add&lt;/button&gt;&lt;/div&gt;"
+ },
+ "after_click_app6": {
+  "html": "&lt;div class=\"mini\" style=\"display: flex;\"&gt;&lt;div class=\"mini-item\" style=\"display: flex;\"&gt;&lt;p&gt;a0&lt;/p&gt;&lt;/div&gt;&lt;div class=\"mini-item\" style=\"display: flex;\"&gt;&lt;p&gt;x1&lt;/p&gt;&lt;/div&gt;&lt;button class=\"mini-btn\"&gt;add&lt;/button&gt;&lt;/div&gt;",
+  "errors": [
+   "Uncaught children: undefined method `children' for nil"
+  ]
+ }
+}

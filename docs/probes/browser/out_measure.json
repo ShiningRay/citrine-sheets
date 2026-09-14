@@ -1,0 +1,120 @@
+{
+ "mounted": {
+  "app1": 4,
+  "app2": 15,
+  "app3": 12,
+  "app4": 3,
+  "todo": 15
+ },
+ "P0_mounted_ok": true,
+ "Q9_numeric_style": {
+  "bad_inline": "font-weight: 600;",
+  "bad_computed": {
+   "width": "28.4219px",
+   "height": "22px",
+   "borderRadius": "0px",
+   "fontSize": "16px",
+   "fontWeight": "600"
+  },
+  "ok_inline": "width: 180px; height: 18px; border-radius: 20px; font-size: 15px;",
+  "ok_computed": {
+   "width": "180px",
+   "height": "18px",
+   "borderRadius": "20px",
+   "fontSize": "15px"
+  }
+ },
+ "Q9_ok": true,
+ "Q10_extra_attrs": {
+  "id": "",
+  "disabled": false,
+  "title": "",
+  "data_role": null,
+  "aria_label": null,
+  "inline_style": null
+ },
+ "Q10_attrs_ok": true,
+ "Q3_before": {
+  "rows": 4,
+  "animStarts": 0,
+  "row0_anims": [
+   "auditPulse@0ms"
+  ]
+ },
+ "Q3_transition_control_same_node": {
+  "transitions": [
+   "opacity@0ms"
+  ],
+  "computed_opacity": "1"
+ },
+ "Q3_after_rebuild_sync": {
+  "rows": 5,
+  "trans_is_same_node": false,
+  "new_trans_node_transitions": [],
+  "new_trans_computed_opacity": "1",
+  "new_row0_anims": [
+   "auditPulse@0ms"
+  ]
+ },
+ "Q3_ok": true,
+ "Q3b_before": {
+  "opacity": "1",
+  "transitions": []
+ },
+ "Q3b_after_toggle": {
+  "node_is_same": false,
+  "old_in_document": false,
+  "new_opacity_computed": "0.2",
+  "new_node_transitions": []
+ },
+ "Q3b_state_transition_ok": true,
+ "Q2_before": {
+  "activeElement": "focus-input",
+  "value": "我输入的内容",
+  "sameAsQuery": true
+ },
+ "Q2_after_add_item": {
+  "input_is_same_node": false,
+  "old_node_still_in_document": false,
+  "old_node_value": "我输入的内容",
+  "new_node_value": "",
+  "activeElement": "BODY"
+ },
+ "Q2_ok": true,
+ "Q7_dispatch_threw": null,
+ "Q7_app4_innerHTML": "&lt;div class=\"crashwrap\" style=\"display: flex;\"&gt;&lt;input class=\"crash-input\" type=\"text\"&gt;&lt;p class=\"crash-echo\"&gt;echo=x&lt;/p&gt;&lt;/div&gt;",
+ "Q7_crash": {
+  "errors": [
+   "Uncaught each: undefined method `each' for nil"
+  ],
+  "input_is_same_node": false,
+  "old_node_in_document": false,
+  "echo_label": "echo=x",
+  "new_input_value": "x"
+ },
+ "Q7_crash_ok": true,
+ "TodoApp": {
+  "item_borderRadius": "0px",
+  "item_background": "rgb(248, 250, 252)",
+  "item_transition": "background, transform",
+  "del_transition": "all",
+  "check_width": "13px",
+  "card_borderRadius": "0px",
+  "card_inline": "background: rgb(255, 255, 255); padding: 28px; width: 480px; box-shadow: rgba(31, 38, 135, 0.28) 0px 24px 64px; display: flex; flex-direction: column; gap: 18px;"
+ },
+ "TodoApp_ok": true,
+ "Q3_delayed": {
+  "static_anims": [
+   "auditPulse@0ms"
+  ],
+  "rebuilt_row_anims": [
+   "auditPulse@0ms"
+  ],
+  "animStarts_total": 0,
+  "trans_transitions": [],
+  "all_errors": [
+   "Uncaught each: undefined method `each' for nil"
+  ]
+ },
+ "Q3_delayed_ok": true
+}

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Citrine Sheets · 迷你电子表格</title>
+  <style>
+    /* ── 设计令牌 ─────────────────────────────────────────── */
+    :root {
+      --bg: #080d18;
+      --panel: #101a2e;
+      --panel-2: #14203a;
+      --cell: #0e1626;
+      --cell-alt: #0b1220;
+      --line: #1e2c48;
+      --line-soft: #17233b;
+      --text: #e6ecf8;
+      --dim: #7a88a3;
+      --accent: #4f9cf9;
+      --accent-soft: rgba(79,156,249,.16);
+      --flash: #d8a13a;
+      --flash-soft: rgba(216,161,58,.22);
+      --danger: #f2686f;
+      --ok: #30c48d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(1200px 700px at 12% -10%, #16233d 0%, #080d18 60%) fixed;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                   "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+    p { margin: 0; }
+    input, button { font-family: inherit; font-size: inherit; color: inherit; }
+    .num { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+           font-variant-numeric: tabular-nums; }
+    .dim { color: var(--dim); }
+    .small { font-size: 11px; }
+
+    /* ── 骨架 ─────────────────────────────────────────────── */
+    .shell { max-width: 1720px; margin: 0 auto; padding: 12px; display: flex;
+             flex-direction: column; gap: 10px; }
+    .shell-main { display: flex; gap: 10px; align-items: flex-start; }
+    .shell-left { flex: 3 1 620px; min-width: 0; }
+    .shell-right { flex: 1 1 340px; min-width: 330px; display: flex;
+                   flex-direction: column; gap: 10px; }
+
+    .panel {
+      background: linear-gradient(180deg, rgba(255,255,255,.022), rgba(255,255,255,0)), var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 9px 11px 11px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.34);
+    }
+    .panel-head { justify-content: space-between; align-items: center; padding-bottom: 7px;
+                  border-bottom: 1px solid var(--line); }
+    .panel-title { font-size: 11px; font-weight: 600; letter-spacing: .09em; color: var(--dim); }
+    .panel-tools { align-items: center; flex-wrap: wrap; }
+
+    .chip {
+      background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+      padding: 3px 9px; font-size: 12px; color: var(--dim); cursor: pointer;
+      transition: color .15s, border-color .15s, background .15s, transform .1s;
+    }
+    .chip:hover { color: var(--text); border-color: var(--accent); }
+    .chip:active { transform: scale(.97); }
+    .chip.is-on { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+    .chip-primary { color: var(--text); border-color: var(--accent); }
+    .chip-danger:hover { border-color: var(--danger); color: var(--danger); }
+    .chip-icon { min-width: 74px; text-align: left; }
+    .chip-bold { font-weight: 700; }
+    .swatch { color: transparent; width: 26px; height: 20px; padding: 0; border-radius: 6px;
+              border: 1px solid var(--line); position: relative; }
+    .swatch::after { content: ""; position: absolute; inset: 3px; border-radius: 3px;
+                     background: currentColor; }
+    .swatch-amber { color: #a8801f; }
+    .swatch-green { color: #1f7a4d; }
+    .swatch-red { color: #8f2f3a; }
+    .chip-cell { font-family: ui-monospace, monospace; padding: 2px 6px; font-size: 11px; }
+
+    /* ── 工具条 ───────────────────────────────────────────── */
+    .tb-row { align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+    .tb-group { align-items: center; }
+    .tb-selection { font-weight: 600; color: var(--accent); font-size: 13px; }
+    .tb-dims, .tb-action { font-size: 11px; color: var(--dim); }
+
+    /* ── 公式栏 ───────────────────────────────────────────── */
+    .fx-row { align-items: center; gap: 8px; }
+    .fx-name { flex: 0 0 88px; text-align: center; background: var(--panel-2);
+               border: 1px solid var(--line); border-radius: 8px; padding: 5px 0;
+               font-weight: 600; font-size: 12px; }
+    .fx-sym { color: var(--dim); font-style: italic; font-family: Georgia, serif; font-size: 14px; }
+    .fx-input { flex: 1 1 auto; min-width: 0; background: var(--panel-2); border: 1px solid var(--line);
+                border-radius: 8px; padding: 6px 10px; outline: none;
+                font-family: ui-monospace, monospace;
+                transition: border-color .18s, box-shadow .18s, background .18s; }
+    .fx-input:focus { border-color: var(--accent); background: #0d1728;
+                      box-shadow: 0 0 0 3px var(--accent-soft); }
+    .fx-buttons { gap: 6px; }
+    .fx-hint { padding-top: 5px; }
+    .hint { font-size: 11px; color: var(--dim); }
+    .hint.is-edit { color: var(--flash); }
+
+    /* ── 网格 ─────────────────────────────────────────────── */
+    .grid-toolbar { align-items: center; gap: 14px; padding-bottom: 6px; flex-wrap: wrap; }
+    .grid-range { font-weight: 600; color: var(--accent); }
+    .grid-action { font-size: 11px; color: var(--dim); }
+    .grid-legend { align-items: center; margin-left: auto; }
+    .legend { font-size: 11px; }
+    .legend-sel { color: var(--accent); }
+    .legend-flash { color: var(--flash); }
+    .legend-err { color: var(--danger); }
+
+    .grid-scroll { overflow: auto; max-height: 460px; border: 1px solid var(--line);
+                   border-radius: 8px; position: relative; }
+    .grid-head { position: sticky; top: 0; z-index: 3; background: var(--panel-2); }
+    .grid-head, .grid-row { display: flex; align-items: stretch; }
+    .grid-corner, .grid-row-head, .grid-col-head {
+      flex: 0 0 46px; width: 46px; text-align: center; font-size: 11px; color: var(--dim);
+      background: var(--panel-2); border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .grid-row-head { position: sticky; left: 0; z-index: 2; display: flex; }
+    .grid-col-head { border-bottom: 1px solid var(--line); }
+    .grid-head .grid-corner { position: sticky; left: 0; z-index: 4; }
+    .head-inner { width: 100%; height: 22px; display: flex; align-items: center;
+                  justify-content: center; }
+    .head-inner.is-on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    .head-text { font-size: 11px; }
+
+    /* 单元格三层结构：cell（静态布局）> cell-chrome（外观/选中态）> cell-text（值） */
+    .cell {
+      flex: 0 0 84px; width: 84px; height: 22px;
+      border-right: 1px solid var(--line-soft);
+      border-bottom: 1px solid var(--line-soft);
+      cursor: cell; overflow: hidden; position: relative; background: var(--cell);
+    }
+    .cell-chrome { width: 100%; height: 100%; display: flex; align-items: center;
+                   padding: 0 6px; background: var(--cell); transition: background .12s; }
+    .cell-text { font-size: 12px; white-space: nowrap; overflow: hidden;
+                 text-overflow: ellipsis; }
+    .cell-chrome.is-num .cell-text { text-align: right; width: 100%; }
+    .cell-chrome.is-bold .cell-text { font-weight: 700; }
+    .cell-chrome.is-err .cell-text { color: var(--danger); font-weight: 600; }
+    .cell-chrome.is-sel { outline: 2px solid var(--accent); outline-offset: -2px;
+                          background: #16294a; z-index: 1; }
+    .cell-chrome.is-flash { background: var(--flash-soft); }
+    .cell-chrome.is-sel.is-flash { background: #2b3448; }
+    .cell:hover .cell-chrome { background: #132039; }
+
+    /* ── 检查器 / 状态栏 / 埋点 ───────────────────────────── */
+    .ins-body { gap: 2px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+    .ins-section { gap: 3px; padding-top: 7px; }
+    .ins-title { font-size: 11px; color: var(--dim); }
+    .ins-chips { flex-wrap: wrap; gap: 4px; }
+    .kv { align-items: baseline; gap: 6px; }
+    .kv-k { font-size: 11px; color: var(--dim); flex: 0 0 74px; }
+    .kv-v { font-size: 12px; word-break: break-all; }
+    .hint-line { font-size: 11px; color: var(--dim); }
+
+    .st-row { align-items: center; flex-wrap: wrap; gap: 6px 16px; }
+    .st-group { align-items: center; gap: 12px; flex-wrap: wrap; }
+    .st-label { font-size: 11px; color: var(--dim); letter-spacing: .08em; }
+    .st-stat { align-items: baseline; gap: 4px; }
+    .st-k { font-size: 11px; color: var(--dim); }
+    .st-v { font-size: 12px; }
+
+    .dbg-row { align-items: center; gap: 12px; }
+    .dbg-group { flex-wrap: wrap; gap: 14px; }
+    .dbg-metric { gap: 0; }
+    .dbg-k { font-size: 10px; color: var(--dim); white-space: nowrap; }
+    .dbg-v { font-size: 13px; font-weight: 600; color: var(--accent); }
+    .dbg-note { font-size: 10px; color: var(--dim); padding-top: 4px; }
+
+    /* ── 滚动条与动效 ─────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: #22314e; border-radius: 5px; }
+    ::-webkit-scrollbar-thumb:hover { background: #2f4267; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    @media (prefers-reduced-motion: reduce) {
+      .chip, .cell { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div id="panel-toolbar"></div>
+    <div id="panel-formula"></div>
+    <div class="shell-main">
+      <div class="shell-left" id="panel-grid"></div>
+      <div class="shell-right">
+        <div id="panel-inspector"></div>
+        <div id="panel-debug"></div>
+      </div>
+    </div>
+    <div id="panel-status"></div>
+  </div>
+  <script src="sheets.js"></script>
+</body>
+</html>

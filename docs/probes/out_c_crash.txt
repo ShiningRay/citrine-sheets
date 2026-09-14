@@ -1,0 +1,12 @@
+
+=== 最小复现：订阅者 A 的 block 销毁了订阅者 B（A 在 B 之前订阅） ===
+订阅顺序 = [a, b]；a 的 block 会 dispose b
+s.set(1) → NoMethodError: undefined method 'each' for nil
+崩溃前执行到 log=[:a, :b, :a]
+
+=== 变体：被销毁者在快照中位于最后一个（不进 release_deps 的坑） ===
+s2.set(1) → NoMethodError: undefined method 'each' for nil
+
+=== 同一套机制在渲染器里的真实触发路径（MemoryRenderer） ===
+w.text = 'x' → 正常，inner 块重建
+w.other = 1 → 正常

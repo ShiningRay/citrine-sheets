@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Citrine API 审计探针（真实浏览器测量）</title>
+<style>
+  @keyframes auditPulse { from { opacity: 1; } to { opacity: 0.25; } }
+  .anim { animation: auditPulse 5s linear infinite; background: #eef; }
+</style>
+</head>
+<body>
+  <div id="app1"></div>
+  <div id="app2"></div>
+  <div id="app3"></div>
+  <div id="app4"></div>
+  <div id="todo"></div>
+
+  <pre id="RESULT">PENDING</pre>
+  <script>
+    window.__errs = [];
+    window.addEventListener("error", function (e) { window.__errs.push(String(e.message)); });
+    window.__animStarts = 0;
+    document.addEventListener("animationstart", function () { window.__animStarts += 1; }, true);
+  </script>
+  <script src="probe_d.js"></script>
+  <script>
+  (function () {
+    var out = {};
+    var cs = function (el, p) { return el ? getComputedStyle(el)[p] : "<null>"; };
+    var q = function (s) { return document.querySelector(s); };
+    var qa = function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); };
+    var transitions = function (el) {
+      return (el && el.getAnimations ? el.getAnimations() : [])
+        .filter(function (a) { return a.constructor.name === "CSSTransition"; })
+        .map(function (a) { return a.transitionProperty + "@" + Math.round(a.currentTime) + "ms"; });
+    };
+    var anims = function (el) {
+      return (el && el.getAnimations ? el.getAnimations() : [])
+        .filter(function (a) { return a.constructor.name === "CSSAnimation"; })
+        .map(function (a) { return a.animationName + "@" + Math.round(a.currentTime) + "ms"; });
+    };
+    function write() {
+      document.getElementById("RESULT").textContent =
+        "RESULT_JSON_START" + JSON.stringify(out) + "RESULT_JSON_END";
+    }
+    function phase(name, fn) {
+      try { fn(); out[name + "_ok"] = true; }
+      catch (e) { out[name + "_error"] = (e && e.constructor ? e.constructor.name : "?") + ": " + (e && e.message); }
+      write();
+    }
+
+    phase("P0_mounted", function () {
+      out.mounted = {
+        app1: qa("#app1 *").length, app2: qa("#app2 *").length,
+        app3: qa("#app3 *").length, app4: qa("#app4 *").length, todo: qa("#todo *").length
+      };
+    });
+
+    phase("Q9", function () {
+      var bad = q("#app1 .num-bad"), ok = q("#app1 .num-ok");
+      out.Q9_numeric_style = {
+        bad_inline: bad.getAttribute("style"),
+        bad_computed: { width: cs(bad, "width"), height: cs(bad, "height"),
+                        borderRadius: cs(bad, "borderRadius"), fontSize: cs(bad, "fontSize"),
+                        fontWeight: cs(bad, "fontWeight") },
+        ok_inline: ok.getAttribute("style"),
+        ok_computed: { width: cs(ok, "width"), height: cs(ok, "height"),
+                       borderRadius: cs(ok, "borderRadius"), fontSize: cs(ok, "fontSize") }
+      };
+    });
+
+    phase("Q10_attrs", function () {
+      var btn = q("#app1 .attr-test");
+      out.Q10_extra_attrs = {
+        id: btn.id, disabled: btn.disabled, title: btn.title,
+        data_role: btn.getAttribute("data-role"), aria_label: btn.getAttribute("aria-label"),
+        inline_style: btn.getAttribute("style")
+      };
+    });
+
+    phase("Q3", function () {
+      out.Q3_before = {
+        rows: qa("#app2 .anim").length,
+        animStarts: window.__animStarts,
+        row0_anims: anims(q("#app2 .anim"))
+      };
+      var transEl = q("#app2 .trans");
+      transEl.style.opacity = "0.5";
+      out.Q3_transition_control_same_node = {
+        transitions: transitions(transEl), computed_opacity: cs(transEl, "opacity")
+      };
+      q("#app2 .anim-add").click();
+      var transEl2 = q("#app2 .trans");
+      out.Q3_after_rebuild_sync = {
+        rows: qa("#app2 .anim").length,
+        trans_is_same_node: transEl2 === transEl,
+        new_trans_node_transitions: transitions(transEl2),
+        new_trans_computed_opacity: cs(transEl2, "opacity"),
+        new_row0_anims: anims(q("#app2 .anim"))
+      };
+      window.__transEl = transEl2;
+    });
+
+    phase("Q3b_state_transition", function () {
+      var before = q("#app2 .trans-state");
+      out.Q3b_before = { opacity: cs(before, "opacity"), transitions: transitions(before) };
+      q("#app2 .trans-toggle").click();
+      var after = q("#app2 .trans-state");
+      out.Q3b_after_toggle = {
+        node_is_same: after === before,
+        old_in_document: document.contains(before),
+        new_opacity_computed: cs(after, "opacity"),
+        new_node_transitions: transitions(after)
+      };
+    });
+
+    phase("Q2", function () {
+      var fi = qa("#app3 .focus-input")[1];
+      fi.focus();
+      fi.value = "我输入的内容";
+      fi.dispatchEvent(new Event("input", { bubbles: true }));
+      out.Q2_before = {
+        activeElement: document.activeElement.className, value: fi.value,
+        sameAsQuery: qa("#app3 .focus-input")[1] === fi
+      };
+      q("#app3 .focus-add").click();
+      var fi2 = qa("#app3 .focus-input")[1];
+      out.Q2_after_add_item = {
+        input_is_same_node: fi2 === fi,
+        old_node_still_in_document: document.contains(fi),
+        old_node_value: fi.value,
+        new_node_value: fi2.value,
+        activeElement: document.activeElement.className || document.activeElement.tagName
+      };
+    });
+
+    phase("Q7_crash", function () {
+      var ci = q("#app4 .crash-input");
+      window.__errs = [];
+      ci.value = "x";
+      out.Q7_dispatch_threw = null;
+      try {
+        ci.dispatchEvent(new Event("input", { bubbles: true }));
+      } catch (e) {
+        out.Q7_dispatch_threw = (e.constructor ? e.constructor.name : "?") + ": " + e.message;
+      }
+      out.Q7_app4_innerHTML = document.getElementById("app4").innerHTML;
+      out.Q7_crash = {
+        errors: window.__errs.slice(),
+        input_is_same_node: q("#app4 .crash-input") === ci,
+        old_node_in_document: document.contains(ci),
+        echo_label: q("#app4 .crash-echo") ? q("#app4 .crash-echo").textContent : "<null>",
+        new_input_value: q("#app4 .crash-input").value
+      };
+    });
+
+    phase("TodoApp", function () {
+      var card = q("#todo > div");
+      // 先加一条待办，才能量到 .rv-item / .rv-check 的真实样式
+      var tin = q("#todo .rv-input");
+      tin.value = "买牛奶";
+      tin.dispatchEvent(new Event("input", { bubbles: true }));
+      q("#todo .rv-add").click();
+      var item = q("#todo .rv-item");
+      out.TodoApp = {
+        item_borderRadius: cs(item, "borderRadius"),
+        item_background: cs(item, "backgroundColor"),
+        item_transition: cs(item, "transitionProperty"),
+        del_transition: cs(q("#todo .rv-del"), "transitionProperty"),
+        check_width: cs(q("#todo .rv-check"), "width"),
+        card_borderRadius: cs(card, "borderRadius"),
+        card_inline: card ? card.getAttribute("style") : "<null>"
+      };
+    });
+
+    // ── 多余块（已移到 measure2.html）
+    /*
+    phase("TwoMountAt", function () {
+      var load = window.__errs.slice();
+      window.__errs = [];
+      out.two_mount_before = {
+        app5_label: q("#app5 .mini-label").textContent, app6_label: q("#app6 .mini-label").textContent
+      };
+      var click5 = null;
+      try { q("#app5 .mini-btn").click(); } catch (e) { click5 = e.message; }
+      out.two_mount_click_app5 = {
+        sync_throw: click5, app5_label: q("#app5 .mini-label").textContent,
+        errors: window.__errs.slice()
+      };
+      var click6 = null;
+      try { q("#app6 .mini-btn").click(); } catch (e) { click6 = e.message; }
+      out.two_mount_click_app6 = {
+        sync_throw: click6, app6_label: q("#app6 .mini-label").textContent,
+        errors: window.__errs.slice()
+      };
+    });
+
+    */
+    setTimeout(function () {
+      phase("Q3_delayed", function () {
+        out.Q3_delayed = {
+          static_anims: anims(q("#app2 .anim-static")),
+          rebuilt_row_anims: anims(q("#app2 .anim")),
+          animStarts_total: window.__animStarts,
+          trans_transitions: transitions(window.__transEl),
+          all_errors: window.__errs.slice()
+        };
+      });
+    }, 700);
+  })();
+  </script>
+</body>
+</html>

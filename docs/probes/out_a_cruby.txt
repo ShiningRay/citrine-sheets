@@ -1,0 +1,77 @@
+
+=== 问题 4：block 返回值不是 String 时（Renderer#run_block 只认 String） ===
+set_text 实际收到的调用序列: ["ok 3"]
+  label(42) -> text=nil dom.children=0
+  label(nil) -> text=nil dom.children=0
+  label(n*2) -> text=nil dom.children=0
+  label(size) -> text=nil dom.children=0
+  label(3.14) -> text=nil dom.children=0
+  label(sym) -> text=nil dom.children=0
+  label(array) -> text=nil dom.children=0
+  label(string) -> text="ok 3" dom.children=0
+-- StringRenderer 侧同一组件 --
+<div style="display:flex"><p></p><p></p><p></p><p></p><p></p><p></p><p></p><p>ok 3</p></div>
+
+=== 问题 9：Style.normalize 支持的键值形态 ===
+  {font_size: "18px"}                -> normalize {font_size: "18px"}            camel=["fontSize"]             kebab=["font-size"]
+  {fontSize: "18px"}                 -> normalize {font_size: "18px"}            camel=["fontSize"]             kebab=["font-size"]
+  {"fontSize" => "18px"}             -> normalize {font_size: "18px"}            camel=["fontSize"]             kebab=["font-size"]
+  {width: 18}                        -> normalize {width: 18}                    camel=["width"]                kebab=["width"]
+  {width: 18.5}                      -> normalize {width: 18.5}                  camel=["width"]                kebab=["width"]
+  {font_weight: :bold}               -> normalize {font_weight: "bold"}          camel=["fontWeight"]           kebab=["font-weight"]
+  {text_decoration: :line_through}   -> normalize {text_decoration: "line-through"} camel=["textDecoration"]       kebab=["text-decoration"]
+  {transform: :translate_x}          -> normalize {transform: "translate-x"}     camel=["transform"]            kebab=["transform"]
+  {background_color: nil}            -> normalize {background_color: nil}        camel=["backgroundColor"]      kebab=["background-color"]
+  {width: true}                      -> normalize {width: true}                  camel=["width"]                kebab=["width"]
+  {"font-size": "18px"}              -> normalize {"font-size": "18px"}          camel=["font-size"]            kebab=["font-size"]
+  {zIndex: 3}                        -> normalize {z_index: 3}                   camel=["zIndex"]               kebab=["z-index"]
+  {"--custom-var" => "red"}          -> normalize {"--custom-var": "red"}        camel=["--custom-var"]         kebab=["--custom-var"]
+  {width: "calc(100% - 20px)"}       -> normalize {width: "calc(100% - 20px)"}   camel=["width"]                kebab=["width"]
+
+-- normalize 值形态（Symbol / 数字 / 嵌套 Hash / 数组）--
+  {border: {width: 1}} -> {border: {width: 1}}
+  {grid_template_columns: ["1fr", "1fr"]} -> {grid_template_columns: ["1fr", "1fr"]}
+  {content: :none} -> {content: "none"}
+
+-- StringRenderer 产出（注意 width:18 / border-radius:20 / font-wieght）--
+<div style="width:18;height:18;border-radius:20;padding:4px;display:flex"><p style="font-size:15;line-height:1.5;font-wieght:600">x</p></div>
+
+=== 问题 10：静默失败入口（CRuby 侧） ===
+带错拼样式键 font_wieght / 多余事件名 on_input 仍正常渲染（无任何警告）：
+<div style="display:flex"><p style="font-wieght:600">c=0</p><input type="text" value="字符串字面量"><input type="checkbox" checked></div>
+→ 说明：CRuby/SSR 侧对未知 prop / 事件名 / 样式键 100% 静默。
+
+-- 未声明 state 的读/写 --
+  signal(:cont) -> ArgumentError: 未声明的 state: cont
+  computed(:doubl) -> ArgumentError: 未声明的 computed: doubl
+  忘记 self. 的赋值 `count = 99` -> 无异常，signal=0（静默无效）
+  self.count += 1 -> ok, count=1
+
+-- 未声明 prop --
+  TypoWidget.new(cnt: 1) -> ArgumentError: 未声明的 prop: cnt
+  TypoWidget.new(count: 1)（把 state 名当 prop 传）-> ArgumentError: 未声明的 prop: count
+
+-- prop 类型校验 --
+  TypedWidget.new(title: 42) -> TypeError: prop title 应为 String，实际为 Integer
+  TypedWidget.new(title: nil) -> TypeError: prop title 应为 String，实际为 NilClass
+
+-- 没有渲染器时调用 DSL --
+  renderer=nil 时 label {} -> NoMethodError: undefined method 'children' for nil
+
+-- 事件处理器类型任意（错误只在触发时才暴露）--
+  编译/挂载阶段：无异常
+  <button>go</button><button>two-arg proc</button>
+  handle_event("not a handler") -> ArgumentError: 无法处理的事件处理器: "not a handler"
+  handle_event(->(a,b){}) -> ArgumentError: wrong number of arguments (given 1, expected 2)
+  handle_event("not a handler") -> ArgumentError: 无法处理的事件处理器: "not a handler"
+  handle_event(->(a,b){}) -> ArgumentError: wrong number of arguments (given 1, expected 2)
+
+=== 问题 5：批量更新 —— 一个 handler 改多个信号触发几轮 ===
+首次挂载（1 轮）：create_dom=7 label_a=1 label_b=1 label_sum=1 c-block=1 computed=1
+  dom 节点数=4
+handler 内连续改 a,b,c 三个信号（1 次用户操作）：
+  create_dom=0 label_a=1 label_b=1 label_sum=3 computed=3
+handler 内连续改同一个信号 a 三次：create_dom=0 label_a=3 computed=3
+handler 改两个被同一 computed 依赖的信号：computed=2 label_render=2
+  set_text 收到的中间值序列=["F0|L0", "F1|L0", "F1|L1"]（可见中间态即级联重跑的证据）
+同一次 handler 中 create_dom 增量=0（挂载时 7）

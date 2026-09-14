@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8"><title>两次 mount_at</title></head>
+<body>
+  <div id="app5"></div>
+  <div id="app6"></div>
+  <pre id="RESULT">PENDING</pre>
+  <script>
+    window.__errs = [];
+    window.addEventListener("error", function (e) { window.__errs.push(String(e.message)); });
+  </script>
+  <script src="probe_e.js"></script>
+  <script>
+  (function () {
+    var out = {};
+    var q = function (s) { return document.querySelector(s); };
+    try {
+      out.before = { app5: q("#app5").innerHTML, app6: q("#app6").innerHTML };
+      window.__errs = [];
+      try { q("#app5 .mini-btn").click(); } catch (e) { out.click5_throw = String(e && e.message); }
+      out.after_click_app5 = {
+        html: q("#app5").innerHTML, errors: window.__errs.slice(), app6_html: q("#app6").innerHTML
+      };
+      try { q("#app6 .mini-btn").click(); } catch (e) { out.click6_throw = String(e && e.message); }
+      out.after_click_app6 = { html: q("#app6").innerHTML, errors: window.__errs.slice() };
+    } catch (e) { out.outer_error = String(e && e.message); }
+    document.getElementById("RESULT").textContent = "RESULT_JSON_START" + JSON.stringify(out) + "RESULT_JSON_END";
+  })();
+  </script>
+</body></html>

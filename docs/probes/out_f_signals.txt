@@ -1,0 +1,36 @@
+probe_f_signals.rb:7: warning: already initialized constant Signal
+
+=== 问题 6a：非 state 宏的动态信号（Hash + 直接实例化）能否参与依赖追踪 ===
+初始 runs = {a: 1, b: 1}
+set cells[:b] = 'B1' → runs = {a: 1, b: 2}（只有 b 的 Effect 重跑 ✓）
+Effect 个数 = 2；Signal 完全能脱离 state 宏工作 ✓
+
+=== 问题 6b：Signal#set 的相等性短路 —— 原地修改不会被通知 ===
+初始 calls（含 Effect.create 的那次） = 1
+arr.set(arr.get.push(1)) → calls = 1，数组内容 = [1]
+  ↑ 内容变了但没人被通知（signal.rb:21 `return self if new_value == @value`）
+arr.set(arr.get + [2]) → calls = 2，内容 = [1, 2]
+
+=== 问题 6c：同值写入短路（重复 set 不会重渲染） ===
+连续 5 次写同值 → Effect 重跑次数增量 = 0
+写不同值 → 重跑次数增量 = 1
+
+=== 问题 6d：动态信号没有生命周期归属（谁销毁它？） ===
+Effect#dispose 会 unsubscribe，但 Signal 自己没有任何 dispose/owner 概念
+Effect 可销毁 = true；Signal 可销毁 = false
+（浏览器侧的真实泄漏只有定时器/DOM 监听器；信号本身的引用环由 JS GC 处理）
+
+=== 问题 5 补充：一次 handler 里写同一信号多次 / 写多个信号 ===
+改造 a、b 各一次 → createElement 增量 = 6（3 个 label × 2 轮）
+同一信号连写 3 次 → createElement 增量 = 9（3 轮 × 3 节点）
+
+=== 问题 4 补充：block 同时返回 String 又建了子节点 → 文字被静默丢弃 ===
+set_text 收到的调用 = ["inner", "control"]（'尾巴文字' 不在其中）
+StringRenderer 输出 = "<div style=\"display:flex\"><p class=\"both\"><div style=\"display:flex\"><p>inner</p></div></p><p class=\"orphantext\">control</p></div>"
+
+=== 问题 9 补充：style 传非 Hash / 值形态异常 ===
+style: "color:red" → NoMethodError: undefined method 'each_with_object' for an instance of String
+style 值形态异常（nil / Symbol / Array）→ "<div style=\"font-size:;color:red;width:[1, 2];display:flex\"><p>x</p></div>"
+
+=== 问题 10 补充：DSL 层未知 prop vs 构造器层未知 prop ===
+DSL: box(totally_unknown: 1, on_input: :x) → "<div style=\"display:flex\"><p>x</p></div>"（无任何报错）
