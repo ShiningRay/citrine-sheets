@@ -32,7 +32,8 @@ module Sheets
                 label(css_class: "dim small") { "无（不是公式格）" }
               else
                 deps.first(40).each do |(row, col)|
-                  chip(Format.cell_key(row, col), false, -> { app.select_cell(row, col) }, "chip-cell")
+                  key = Format.cell_key(row, col)
+                  chip(key, false, -> { app.select_cell(row, col) }, "chip-cell", key: key)
                 end
               end
             end
@@ -48,7 +49,8 @@ module Sheets
                 label(css_class: "dim small") { "无" }
               else
                 dependents.first(40).each do |(row, col)|
-                  chip(Format.cell_key(row, col), false, -> { app.select_cell(row, col) }, "chip-cell")
+                  key = Format.cell_key(row, col)
+                  chip(key, false, -> { app.select_cell(row, col) }, "chip-cell", key: key)
                 end
               end
             end

@@ -43,6 +43,9 @@
     .small { font-size: 11px; }
 
     /* ── 骨架 ─────────────────────────────────────────────── */
+    /* 布局骨架（.shell / .shell-main / .shell-left / .shell-right）由根组件的 view
+       渲染出来（从前是这份 HTML 里的六个空 div + 六次 mount_at：v1 没有组件嵌套）。
+       这里只留样式与挂载点 #app。 */
     .shell { max-width: 1720px; margin: 0 auto; padding: 12px; display: flex;
              flex-direction: column; gap: 10px; }
     .shell-main { display: flex; gap: 10px; align-items: flex-start; }
@@ -134,6 +137,8 @@
     .head-text { font-size: 11px; }
 
     /* 单元格两层结构：cell（静态槽 + 响应式 class/style）> cell-text（值）。
+       每格还带一个 key（地址，如 "B3"）：结构块重跑（行列数变化、将来的插入/删除行列）
+       时按 key 复用，已有的 DOM / Effect / 事件都原地保留。
        G-2 之前是三层（cell > cell-chrome > cell-text）：props 只能在创建时求值，
        外观订阅必须关进一个中层容器；现在 css_class/style 传 Proc，
        外观变化只重设属性、不重建节点，中层因此消失。 */
@@ -190,18 +195,7 @@
   </style>
 </head>
 <body>
-  <div class="shell">
-    <div id="panel-toolbar"></div>
-    <div id="panel-formula"></div>
-    <div class="shell-main">
-      <div class="shell-left" id="panel-grid"></div>
-      <div class="shell-right">
-        <div id="panel-inspector"></div>
-        <div id="panel-debug"></div>
-      </div>
-    </div>
-    <div id="panel-status"></div>
-  </div>
+  <div id="app"></div>
   <script src="sheets.js"></script>
 </body>
 </html>

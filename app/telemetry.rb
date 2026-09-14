@@ -12,12 +12,9 @@ module Sheets
   # 调用 begin_round! 重置计数，面板显示"这次动作让框架做了多少事"。
   module Telemetry
     class << self
-      attr_accessor :mount_ms
-
       def install!
         wrap_effect!
         wrap_dom! if defined?(Citrine::DomRenderer)
-        self.mount_ms ||= 0
         reset_counters!
         true
       end
@@ -52,7 +49,6 @@ module Sheets
 
       def report
         {
-          mount_ms: mount_ms.to_i,
           effect_runs: round_effects.to_i,
           node_creates: round_nodes.to_i,
           total_effect_runs: total_effects.to_i,
@@ -63,6 +59,9 @@ module Sheets
 
       attr_accessor :rounds, :round_effects, :round_nodes, :total_effects, :total_nodes,
                     :breakdown
+      # 网格的视图信号（选中/闪烁/行列高亮）由 GridPanel 持有，但它算进"信号对象数"
+      # 这个应用级指标：面板在分配信号时上报总数、卸载时归零。
+      attr_accessor :view_signals
 
       private
 

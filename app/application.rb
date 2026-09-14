@@ -3,44 +3,87 @@
 require "citrine"
 require_relative "workbook"
 require_relative "format"
+require_relative "panels/toolbar"
+require_relative "panels/formula_bar"
+require_relative "panels/grid"
+require_relative "panels/inspector"
+require_relative "panels/status_bar"
+require_relative "panels/debug_bar"
 
 module Sheets
-  # 共享应用状态：工作簿 + 选区 + 编辑缓冲 + 格式 + 撤销。
+  # 应用根组件：共享状态（工作簿 + 选区 + 编辑缓冲 + 格式 + 撤销）的持有者，
+  # 也是整棵组件树的入口。
   #
-  # 这是本 demo 与 citrine-market-terminal 最大的架构差异：
-  # 那边是"单个组件类 + 面板混入"，把状态挂在组件实例上；
-  # 这边是**多个挂载根共享一个普通 Ruby 对象**——因为 v1 没有组件嵌套
-  # （FRICTION F5），一个根只能是一个组件，而电子表格天然要拆成
-  # 工具条 / 公式栏 / 网格 / 检查器 / 状态栏 / 埋点六个独立区域。
-  # 状态必须外置到普通对象，各根组件只做"读信号 + 发动作"。
+  # 结构（组件嵌套，随 citrine PR #15 落地）：
+  #
+  #   Application                      ← 唯一的挂载根（#app）
+  #     ├── Toolbar / FormulaBar / StatusBar
+  #     ├── GridPanel                  ← 网格视图态（选中/闪烁/行列高亮）归它自己
+  #     ├── Inspector / DebugBar
+  #     └── 共享的东西一律经 prop `app:` 往下传，动作经回调 Proc 回传
+  #
+  # 从前这里是"一个普通 Ruby 对象 + 六个平级挂载根"（v1 无组件嵌套，FRICTION F5，
+  # 见 sheets.html 里那六个空 div）——布局骨架只能写在 HTML 里、面板之间只能靠共享对象通信。
+  # 现在布局是 view 里的嵌套调用，面板是真正的子组件。
   #
   # 选区与闪烁不放进 Workbook：工作簿的 chrome 会被撤销栈快照，
   # 把视图态混进去会让"撤销"顺带回滚选区。
-  class Application
+  class Application < Citrine::Component
     FLASH_LIMIT = 400 # 一次编辑最多闪烁标注这么多格（避免"重算全部"刷屏）
 
-    attr_reader :workbook, :selection, :edit_text, :edit_mode, :notice, :last_action, :recalc_view, :editor
+    components Panels::Toolbar, Panels::FormulaBar, Panels::GridPanel,
+               Panels::Inspector, Panels::StatusBar, Panels::DebugBar
+
+    attr_reader :workbook, :selection, :edit_text, :edit_mode, :notice, :last_action, :recalc_view, :flash
 
     def initialize(workbook: Workbook.new, clock: nil)
+      super({})
       @workbook = workbook
       @clock = clock
       @r1 = 0
       @c1 = 0
       @r2 = 0
       @c2 = 0
-      @selection = Citrine::Signal.new(selection_state)
-      @edit_text = Citrine::Signal.new("")
-      @edit_mode = Citrine::Signal.new(false)
-      @notice = Citrine::Signal.new({ kind: :info, text: "点选单元格或直接输入；方向键移动，Enter 编辑，Esc 取消" })
-      @recalc_view = Citrine::Signal.new({ computed: 0, cells: 0, cyclic: 0, elapsed: 0, label: "尚未编辑" })
-      @last_action = Citrine::Signal.new("就绪")
-      @view_signals = {}
-      @row_signals = {}
-      @col_signals = {}
-      publish_initial_selection
-      @editor = nil
-      @flash_pending = nil
+      @selection = own_signal(selection_state)
+      @edit_text = own_signal("")
+      @edit_mode = own_signal(false)
+      @notice = own_signal({ kind: :info, text: "点选单元格或直接输入；方向键移动，Enter 编辑，Esc 取消" })
+      @recalc_view = own_signal({ computed: 0, cells: 0, cyclic: 0, elapsed: 0, label: "尚未编辑" })
+      @last_action = own_signal("就绪")
+      @mount_ms = own_signal(0)
+      # 本轮"显示变化的格"：数据层事实，由网格面板翻译成闪烁高亮
+      @flash = own_signal(nil)
+      @flash_seq = 0
       @elapsed = 0
+    end
+
+    # ── view：整棵树的骨架 ──────────────────────────────────
+    #
+    # 容器块**不读任何信号**（读 = 订阅 = 数据一变就重跑整棵树）：
+    # 面板各自订阅自己关心的信号，更新粒度由面板内部决定。
+    def view
+      stack(css_class: "shell", gap: 10) do
+        toolbar(app: self)
+        formula_bar(app: self)
+        row(css_class: "shell-main", gap: 10) do
+          stack(css_class: "shell-left") { grid_panel(app: self) }
+          stack(css_class: "shell-right", gap: 10) do
+            inspector(app: self)
+            debug_bar(app: self)
+          end
+        end
+        status_bar(app: self)
+      end
+    end
+
+    # 挂载耗时只有"整棵树挂完之后"才知道，由入口回填；埋点面板读这个信号，回填即刷新
+    def mark_mounted(ms)
+      @mount_ms.set(ms)
+      self
+    end
+
+    def mount_ms
+      @mount_ms.get
     end
 
     # ── 选区 ────────────────────────────────────────────────
@@ -152,11 +195,13 @@ module Sheets
     end
 
     # initial 为 nil 表示编辑现有内容；传字符串表示"直接输入"（覆盖原内容）
+    #
+    # 焦点不在这里安排：编辑态是**公式栏自己的视图关注点**，它订阅 edit_mode 决定
+    # 何时 focus/blur 自己的输入框（见 FormulaBar#watch_edit_mode）。
     def start_edit(initial = nil)
       text = initial.nil? ? (@workbook.raw(@r2, @c2) || "").to_s : initial.to_s
       @edit_text.set(text)
       @edit_mode.set(true)
-      focus_editor
       self
     end
 
@@ -166,7 +211,6 @@ module Sheets
       text = @edit_text.get.to_s
       report = timed { @workbook.set_raw(@r2, @c2, text) }
       @edit_mode.set(false)
-      blur_editor
       after_edit(report, "已写入 #{active_key}")
       move(dr || 0, dc || 0) if dr || dc
       self
@@ -177,7 +221,6 @@ module Sheets
 
       @edit_mode.set(false)
       @edit_text.set((@workbook.raw(@r2, @c2) || "").to_s)
-      blur_editor
       notice!(:info, "已取消编辑")
       self
     end
@@ -227,23 +270,6 @@ module Sheets
     def recalculate_all
       report = timed { @workbook.recalculate_all }
       after_edit(report, "已重算全部公式")
-      self
-    end
-
-    # 编辑器组件注入（公式栏在挂载时调用）——v1 没有 ref/生命周期（F7），
-    # 需要原生焦点控制只能由 App 持有组件引用
-    def attach_editor(component)
-      @editor = component
-      self
-    end
-
-    def focus_editor
-      @editor&.focus_input
-      self
-    end
-
-    def blur_editor
-      @editor&.blur_input
       self
     end
 
@@ -307,50 +333,31 @@ module Sheets
       end
     end
 
-    # ── 视图态信号（按更新频率拆分，见 Workbook 的说明）────────
+    # ── 视图态的**数据面**（选中/闪烁的呈现归网格面板，见 panels/grid.rb）──
 
-    def view_signal(row, col)
-      @view_signals[[row, col]] ||= Citrine::Signal.new({ selected: false, flash: false })
-    end
-
-    def row_signal(index)
-      @row_signals[index] ||= Citrine::Signal.new(false)
-    end
-
-    def col_signal(index)
-      @col_signals[index] ||= Citrine::Signal.new(false)
-    end
-
+    # 信号对象数：应用级信号 + 工作簿信号 + 网格上报的视图信号（面板自己的状态）
     def signal_count
-      @view_signals.size + @row_signals.size + @col_signals.size + 5 + @workbook.signal_count
+      @signals.size + @workbook.signal_count + Sheets::Telemetry.view_signals.to_i
     end
 
-    # 重算后的闪烁提示：把"哪些格参与了重算"可视化
-    def flash_cells(keys)
-      keys.each do |key|
-        row, col = key
-        signal = view_signal(row, col)
-        state = signal.get
-        signal.set({ selected: state[:selected], flash: true })
-      end
-      keys
-    end
-
-    def clear_flash(keys)
-      keys.each do |key|
-        row, col = key
-        signal = view_signal(row, col)
-        state = signal.get
-        next unless state[:flash]
-
-        signal.set({ selected: state[:selected], flash: false })
-      end
-      keys
+    # 本轮显示变化的格（数据层事实）：网格面板据此标亮、下一拍自己清掉。
+    # 带 seq 是因为 Signal 的"值相同不通知"——同一批格连续两次变化也必须能重新点亮。
+    def publish_flash(keys)
+      @flash_seq += 1
+      @flash.set({ seq: @flash_seq, keys: keys })
+      self
     end
 
     # ── 内部 ────────────────────────────────────────────────
 
     private
+
+    # 应用级信号集中登记：埋点面板要报告"信号对象数"，写死个数容易与实现漂移
+    # （名字不叫 signal：那是框架给 state 宏取值信号的入口）
+    def own_signal(value)
+      (@signals ||= []) << Citrine::Signal.new(value)
+      @signals.last
+    end
 
     def timed
       Sheets::Telemetry.begin_round! # 一轮 = 一次用户动作（埋点面板据此显示本轮开销）
@@ -372,9 +379,7 @@ module Sheets
         label: label
       })
       @last_action.set(label)
-      flash = changed.first(FLASH_LIMIT)
-      flash_cells(flash)
-      @flash_pending = flash
+      publish_flash(changed.first(FLASH_LIMIT))
       self
     end
 
@@ -386,71 +391,16 @@ module Sheets
       self
     end
 
-    # 首屏也要有选中高亮：把初始选区（A1）的视图信号发布一次
-    def publish_initial_selection
-      state = selection_state
-      rect_keys(state).each { |key| update_view(key, selected: true) }
-      (state[:r1]..state[:r2]).each { |i| row_signal(i).set(true) }
-      (state[:c1]..state[:c2]).each { |i| col_signal(i).set(true) }
-      self
-    end
-
     def move_to(r1, c1, r2, c2)
-      previous = selection_state
       @r1 = r1
       @c1 = c1
       @r2 = r2
       @c2 = c2
-      current = selection_state
-      publish_selection_delta(previous, current)
-      @selection.set(current)
+      @selection.set(selection_state)
       unless @edit_mode.get
         @edit_text.set((@workbook.raw(@r2, @c2) || "").to_s)
       end
       self
-    end
-
-    def publish_selection_delta(previous, current)
-      old_cells = rect_keys(previous)
-      new_cells = rect_keys(current)
-      old_index = {}
-      old_cells.each { |key| old_index[key] = true }
-      new_index = {}
-      new_cells.each { |key| new_index[key] = true }
-
-      old_cells.each { |key| update_view(key, selected: false) unless new_index[key] }
-      new_cells.each { |key| update_view(key, selected: true) unless old_index[key] }
-
-      publish_axis_delta(previous[:r1], previous[:r2], current[:r1], current[:r2]) { |i| row_signal(i) }
-      publish_axis_delta(previous[:c1], previous[:c2], current[:c1], current[:c2]) { |i| col_signal(i) }
-    end
-
-    def publish_axis_delta(old_lo, old_hi, new_lo, new_hi)
-      i = old_lo
-      while i <= old_hi
-        yield(i).set(false) if i < new_lo || i > new_hi
-        i += 1
-      end
-      i = new_lo
-      while i <= new_hi
-        yield(i).set(true) if i < old_lo || i > old_hi
-        i += 1
-      end
-    end
-
-    def update_view(key, patch)
-      row, col = key
-      signal = view_signal(row, col)
-      state = signal.get
-      signal.set({ selected: state[:selected], flash: state[:flash] }.merge(patch))
-    end
-
-    def rect_keys(state)
-      keys = []
-      (state[:r1]..state[:r2]).each do |row|
-        (state[:c1]..state[:c2]).each { |col| keys << [row, col] }
-      end
-      keys
     end
 
     def selection_bounds
@@ -534,7 +484,7 @@ module Sheets
       # 以"重算信号"为唯一数据口径即可覆盖所有值变化。
       values = []
       errors = 0
-      keys = rect_keys(state)
+      keys = Format.rect_keys(state)
       keys.each do |(row, col)|
         value = @workbook.value(row, col)
         if Coerce.error?(value)
@@ -574,13 +524,12 @@ module Sheets
       raw.to_s.start_with?("=") ? "公式 → #{base}" : base
     end
 
-    # 由外挂层调用：清理上一次编辑的闪烁标注
-    def tick_visuals
-      return self if @flash_pending.nil?
+    # ── 桩验收用钩子（demo 专用，非框架 API）──────────────
 
-      keys = @flash_pending
-      @flash_pending = nil
-      clear_flash(keys)
+    # 驱动一次"结构变更"（行列数变化），用来验证网格的 keyed 复用：
+    # 已有行/列/单元格应保持同一批 DOM 对象，只有新增的才新建节点。
+    def resize_grid(rows, cols)
+      @workbook.resize(rows: rows, cols: cols)
       self
     end
 
@@ -607,7 +556,6 @@ module Sheets
         "recalc=#{report[:computed]}/#{report[:cells]}/#{report[:cyclic]}",
         "action=#{@last_action.get}",
         "input=#{@edit_text.get}",
-        "flash=#{@view_signals.values.count { |signal| signal.get[:flash] }}",
         "nodes=#{Sheets::Telemetry.breakdown.map { |k, v| "#{k}:#{v}" }.join(",")}",
         "notice=#{@notice.get[:text]}"
       ].join("|")

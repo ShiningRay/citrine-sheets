@@ -8,16 +8,20 @@ module Sheets
   module Panels
     # 公式栏：左侧显示当前地址，中间是编辑框，右侧是确认/取消。
     #
-    # ★ 编辑框挂在"只执行一次的块"里——这是键盘可用的前提：
-    #   输入框一旦被重建就会丢焦点、丢输入法状态。所以本面板的
-    #   fx-row 块不读任何信号，只有旁边的标签各自读信号。
-    #   （market demo 里同样的纪律只是性能问题，这里是功能问题。）
+    # 编辑态与焦点是**本面板自己的视图关注点**：进入编辑态就把焦点送进输入框、
+    # 离开就 blur（见 watch_edit_mode）。从前这是"Application 反向持有组件引用"的
+    # 绕法（挂着 G-10/F7 的名），现在面板用 refs + 生命周期自己管——
+    # 输入框所在的块也**不需要**再靠"永不重建"来保住焦点了：面板是 keyed 复用的
+    # 子组件，结构变化只会移动/更新节点（F5/F6 已落地）。
     class FormulaBar < Panel
       include Common
 
+      on_mount :watch_edit_mode
+      on_unmount :stop_watching
+
       def view
-        panel("panel-formula") do # 不读信号
-          box(css_class: "fx-row") do # 不读信号：输入框必须挂在这里
+        panel("panel-formula") do
+          box(css_class: "fx-row") do
             label(css_class: "fx-name num") { app.selection_label }
             label(css_class: "fx-sym") { "fx" }
             text_input(
@@ -43,6 +47,23 @@ module Sheets
             label(css_class: mode ? "hint is-edit" : "hint") { text }
           end
         end
+      end
+
+      # ── 编辑态 → 焦点（本面板订阅共享的编辑状态）──────────────
+      #
+      # 焦点是"看一个信号、不渲染"的场景，所以是一个独立的 Effect（框架还没有
+      # effect/watch 宏）：挂载时建立、卸载时 dispose，复用（keyed）时不重建。
+      def watch_edit_mode
+        @edit_watch = Citrine::Effect.create { sync_focus(app.edit_mode.get) }
+      end
+
+      def stop_watching
+        @edit_watch&.dispose
+        @edit_watch = nil
+      end
+
+      def sync_focus(editing)
+        editing ? focus_input : blur_input
       end
 
       def commit_from_enter

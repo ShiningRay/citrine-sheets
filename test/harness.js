@@ -26,7 +26,14 @@ function boot() {
     const el = {
       tagName: tag, textContent: "", className: "", value: "", style: {},
       children: [], parentElement: null, _listeners: {}, _attrs: {},
-      appendChild(c) { c.parentElement = this; this.children.push(c); return c; },
+      // 真实 DOM 的 appendChild 是"移动"：已在别处的节点先摘下来，已在同一父下的也移到末尾
+      appendChild(c) {
+        if (c.parentElement && c.parentElement !== this) c.parentElement.removeChild(c);
+        this.children = this.children.filter((x) => x !== c);
+        c.parentElement = this;
+        this.children.push(c);
+        return c;
+      },
       removeChild(c) { c.parentElement = null; this.children = this.children.filter((x) => x !== c); },
       addEventListener(ev, fn) { (this._listeners[ev] = this._listeners[ev] || []).push(fn); },
       fire(ev, event) { (this._listeners[ev] || []).slice().forEach((fn) => fn(event || {})); },
@@ -38,8 +45,8 @@ function boot() {
     return el;
   }
 
-  const ROOT_IDS = ["panel-toolbar", "panel-formula", "panel-grid",
-                    "panel-inspector", "panel-status", "panel-debug"];
+  // 单一挂载根：整棵组件树（含六个面板）都挂在 #app 里
+  const ROOT_IDS = ["app"];
   const roots = {};
   ROOT_IDS.forEach((id) => { roots[id] = makeEl("div"); roots[id].className = id; });
 
@@ -55,9 +62,12 @@ function boot() {
     activeElement: null,
     body: body,
     querySelectorAll: (sel) => {
-      const cls = sel.replace(/^\./, "");
+      // 支持复合类选择器（".cell.is-flash"）：类名列表全部命中才算匹配
+      const classes = String(sel).split(".").filter(Boolean);
       const out = [];
-      ROOT_IDS.forEach((id) => all(roots[id]).forEach((n) => { if (matchClass(n, cls)) out.push(n); }));
+      ROOT_IDS.forEach((id) => all(roots[id]).forEach((n) => {
+        if (classes.every((c) => matchClass(n, c))) out.push(n);
+      }));
       return out;
     },
     querySelector: (sel) => global.document.querySelectorAll(sel)[0] || null,
@@ -66,6 +76,11 @@ function boot() {
   const intervals = [];
   const winHandlers = {};
   global.addEventListener = (ev, fn) => { (winHandlers[ev] = winHandlers[ev] || []).push(fn); };
+  global.removeEventListener = (ev, fn) => {
+    const list = winHandlers[ev] || [];
+    const i = list.indexOf(fn);
+    if (i >= 0) list.splice(i, 1);
+  };
   global.setInterval = (fn, ms) => { const id = intervals.length + 1; intervals.push({ id, fn, ms }); return id; };
   global.clearInterval = (id) => { const i = intervals.findIndex((x) => x.id === id); if (i >= 0) intervals.splice(i, 1); };
   global.Date = Date;
@@ -74,7 +89,7 @@ function boot() {
 
   const byClass = (cls, scope) => (scope ? all(scope) : global.document.querySelectorAll(`.${cls}`))
     .filter((n) => (scope ? matchClass(n, cls) : true));
-  const gridRows = () => all(roots["panel-grid"]).filter((n) => matchClass(n, "grid-row"));
+  const gridRows = () => all(roots["app"]).filter((n) => matchClass(n, "grid-row"));
 
   function cellEl(row, col) {
     const target = gridRows()[row];
@@ -126,6 +141,8 @@ function boot() {
     roots, all, byClass, matchClass, state, fireKey, cellEl, textOf,
     cellText: (row, col) => textOf(cellEl(row, col)),
     inputEl, typeInInput, pressEnterInInput, keyInInput,
+    windowKeyHandlerCount: () => (winHandlers.keydown || []).length,
+    intervalCount: () => intervals.length,
     clickCell(row, col) {
       const el = cellEl(row, col);
       if (!el) return false;
@@ -142,6 +159,8 @@ function boot() {
       return true;
     },
     runTicks(n) { for (let i = 0; i < (n || 1); i += 1) intervals.slice().forEach((x) => x.fn()); },
+    resizeGrid: (rows, cols) => global.sheetsTestApi.resizeGrid(rows, cols),
+    unmountAll: () => global.sheetsTestApi.unmount(),
     nodesCreated: () => created,
     resetNodeCounter() { created = 0; },
     activeElement: () => global.document.activeElement,

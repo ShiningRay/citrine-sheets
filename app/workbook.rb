@@ -29,11 +29,10 @@ module Sheets
     DEFAULT_COLS = 26
     UNDO_LIMIT = 60
 
-    attr_reader :rows, :cols
-
     def initialize(rows: DEFAULT_ROWS, cols: DEFAULT_COLS)
-      @rows = rows
-      @cols = cols
+      # 行列数是**结构信号**：网格的行/列结构块读它，行列数一变就重跑结构块，
+      # 由 keyed 复用把已有行/列/单元格原地保留（只新建真正新增的那些）。
+      @dims = Citrine::Signal.new({ rows: rows, cols: cols })
       @raw = {}         # [row, col] => 原始输入文本
       @ast = {}         # [row, col] => AST（公式格）
       @values = {}      # [row, col] => 计算值
@@ -51,6 +50,23 @@ module Sheets
 
     # ── 读取 ────────────────────────────────────────────────
 
+    # 行列数（读结构信号：在结构块里读即订阅"结构变了"）
+    def rows
+      @dims.get[:rows]
+    end
+
+    def cols
+      @dims.get[:cols]
+    end
+
+    # 结构变更入口：行列数变化 → 结构信号 → 网格的结构块重跑（keyed 复用，见 panels/grid.rb）。
+    # 面板 UI 还没有"插入/删除行列"，这条路径目前由桩验收驱动（test_api 的 resizeGrid）；
+    # 越界的旧数据仍留在 @raw/@chrome 里，只是不再显示（撤销栈也不记录行列数变化）。
+    def resize(rows:, cols:)
+      @dims.set({ rows: [rows.to_i, 1].max, cols: [cols.to_i, 1].max })
+      self
+    end
+
     def raw(row, col)
       @raw[[row, col]]
     end
@@ -64,7 +80,7 @@ module Sheets
 
     def in_bounds?(row, col)
       row.is_a?(Integer) && col.is_a?(Integer) &&
-        row >= 0 && col >= 0 && row < @rows && col < @cols
+        row >= 0 && col >= 0 && row < rows && col < cols
     end
 
     def dependencies(row, col)
@@ -134,7 +150,7 @@ module Sheets
     end
 
     def signal_count
-      @value_signals.size + @chrome_signals.size + 1
+      @value_signals.size + @chrome_signals.size + 1 # +1 = 结构信号（行列数）
     end
 
     def snapshot(row, col)
@@ -288,7 +304,7 @@ module Sheets
         if result[0] == :ok
           @ast[key] = result[1]
           edges = {}
-          Formula.references(result[1], max_row: @rows, max_col: @cols).each do |target|
+          Formula.references(result[1], max_row: rows, max_col: cols).each do |target|
             edges[target] = true
             link(target, key)
           end

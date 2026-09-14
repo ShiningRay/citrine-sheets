@@ -32,6 +32,16 @@ module Sheets
       "#{column_label(col)}#{row + 1}"
     end
 
+    # 选区矩形（{r1:,c1:,r2:,c2:}）→ 单元格坐标列表 [[row, col], …]
+    # 应用侧（聚合统计）与网格侧（选中高亮的增量发布）共用同一份口径
+    def rect_keys(state)
+      keys = []
+      (state[:r1]..state[:r2]).each do |row|
+        (state[:c1]..state[:c2]).each { |col| keys << [row, col] }
+      end
+      keys
+    end
+
     # "B3" → { row: 2, col: 1 }
     def parse_key(key)
       match = key.to_s.strip.upcase.gsub("$", "").match(/\A([A-Z]+)(\d+)\z/)

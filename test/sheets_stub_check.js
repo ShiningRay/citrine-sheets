@@ -2,9 +2,10 @@
 //
 //   rake stubs
 //
-// 覆盖：多根挂载（F2 修复的应用级验证）、种子数据与公式计算、点选与键盘导航、
+// 覆盖：单根组件树挂载、种子数据与公式计算、点选与键盘导航、
 //       直接打字即编辑、公式栏提交与依赖链重算、选区聚合、格式、清空、
-//       撤销重做、循环引用、依赖跳转、闪烁标注、渲染开销量化
+//       撤销重做、循环引用、依赖跳转、闪烁标注、渲染开销量化、
+//       组件嵌套 + keyed 复用的语义（结构变更后节点身份、输入框存活、按 key 复用）
 const { boot } = require("./harness");
 
 let failures = 0;
@@ -21,7 +22,7 @@ function ok(name, condition, detail) {
 const h = boot();
 const state = () => h.state();
 
-console.log("=== 首次挂载：六个挂载根共享一个 Application ===");
+console.log("=== 首次挂载：单一挂载根 #app 里的组件树 ===");
 let s = state();
 eq("选中格", s.sel, "A1");
 eq("填充格数", s.filled, "129");
@@ -89,11 +90,15 @@ h.fireKey("2");
 h.typeInInput("99000");
 h.pressEnterInInput();
 const editNodes = h.nodesCreated();
-// 组成：面板重绘（检查器/状态栏/埋点各自重建内容块）
-// 单元格不在此列：G-2 之后闪烁只重设属性（从前闪烁 27 格要新建 54 个中层节点）
+// 组成：少数真正需要新建的节点（新出现的依赖标签等）。
+// 单元格与已有面板内容都不在此列：G-2 之后闪烁只重设属性，面板内部则按位置/key 复用节点。
 ok(`改一个数新建 DOM 节点 ${editNodes} 个（< 300）`, editNodes < 300, editNodes);
 ok(`数据编辑不新建任何单元格节点：${s.nodes}`, !/cell/.test(String(s.nodes)), s.nodes);
 eq("B4 已写入", h.cellText(3, 1), "99,000");
+const inspText = h.byClass("kv-v").map((n) => String(n.textContent)).join(" · ");
+ok(`检查器 DOM 跟随更新（${inspText}）`, inspText.includes("已写入 B4"), inspText);
+eq("网格工具条动作行跟随更新", h.byClass("grid-action")[0].textContent.includes("已写入 B4"), true);
+ok("状态栏摘要渲染在 DOM 里", String(h.byClass("st-summary")[0].textContent).includes("填充"), h.byClass("st-summary")[0].textContent);
 
 console.log("\n=== 检查器：依赖与反向依赖可点击跳转 ===");
 h.clickCell(1, 4); // E2 = D2/B2
@@ -175,6 +180,73 @@ for (let i = 0; i < 6; i += 1) h.fireKey("ArrowDown");
 eq("连续移动 6 格后输入框仍是同一节点", h.inputEl() === inputRef, true);
 ok("输入框仍挂在文档里（未被重建摘除）", h.inputEl().parentElement !== null, true);
 
+console.log("\n=== 选中高亮的更新粒度（视图态归网格面板）===");
+h.clickCell(1, 1); // B2
+ok("B2 单元格带 is-sel", h.matchClass(h.cellEl(1, 1), "is-sel"), h.cellEl(1, 1).className);
+ok("上一格 A1 的 is-sel 已被清掉", !h.matchClass(h.cellEl(0, 0), "is-sel"), h.cellEl(0, 0).className);
+eq("列头 A 高亮已清掉", h.matchClass(h.byClass("head-inner")[0], "is-on"), false);
+ok("列头 B 高亮", h.matchClass(h.byClass("head-inner")[1], "is-on"), h.byClass("head-inner")[1].className);
+h.fireKey("ArrowDown", { shiftKey: true });
+h.fireKey("ArrowDown", { shiftKey: true });
+eq("网格工具条的选区标签随信号更新（DOM 层）", h.byClass("grid-range")[0].textContent, "B2:B4");
+eq("状态栏单元格数随信号更新（DOM 层）", h.byClass("st-v")[0].textContent, "3");
+h.clickCell(1, 1);
+h.resetNodeCounter();
+const cellRef = h.cellEl(1, 1);
+for (let i = 0; i < 5; i += 1) h.fireKey("ArrowDown");
+ok(`移动 5 格新建 DOM 节点 ${h.nodesCreated()} 个（< 40：单元格只重设 class）`,
+   h.nodesCreated() < 40, h.nodesCreated());
+ok("移动后原单元格节点未被重建", h.cellEl(1, 1) === cellRef, "节点已换");
+
+console.log("\n=== keyed 复用：结构变更只新建真正新增的节点（F6）===");
+const rowsBefore = h.byClass("grid-row").slice();
+const cellsBefore = h.byClass("cell").slice();
+const headsBefore = h.byClass("grid-col-head").slice();
+const inputBefore = h.inputEl();
+const addressBefore = state().sel;
+const textBefore = h.cellText(1, 1);
+h.resizeGrid(62, 26); // 结构变更：多两行
+const rowsAfter = h.byClass("grid-row");
+const cellsAfter = h.byClass("cell");
+eq("行数 60 → 62", rowsAfter.length, 62);
+eq("单元格数 1560 → 1612", cellsAfter.length, 1612);
+ok("原有 60 行仍是同一批 DOM 对象", rowsBefore.every((n, i) => rowsAfter[i] === n),
+   rowsBefore.filter((n, i) => rowsAfter[i] !== n).length + " 行被重建");
+ok("原有 1560 个单元格仍是同一批 DOM 对象", cellsBefore.every((n, i) => cellsAfter[i] === n),
+   cellsBefore.filter((n, i) => cellsAfter[i] !== n).length + " 格被重建");
+ok("列头仍是同一批 DOM 对象", headsBefore.every((n, i) => h.byClass("grid-col-head")[i] === n), "列头被重建");
+ok("公式栏输入框不受结构变更影响（仍是同一节点）", h.inputEl() === inputBefore, "输入框被换掉了");
+eq("结构变更后选区不变", state().sel, addressBefore);
+eq("结构变更后单元格内容不变", h.cellText(1, 1), textBefore);
+h.resizeGrid(60, 26); // 缩回去：新增的行应被卸载
+eq("缩回 60 行后多出来的行被摘掉", h.byClass("grid-row").length, 60);
+eq("单元格数回到 1560", h.byClass("cell").length, 1560);
+ok("原有单元格节点仍然保留", cellsBefore.every((n, i) => h.byClass("cell")[i] === n), "单元格被重建");
+h.clickCell(1, 1);
+eq("结构变更后仍可正常选中", state().sel, "B2");
+eq("结构变更后仍可编辑（提交写入生效）", (() => {
+  h.fireKey("7");
+  h.pressEnterInInput();
+  return h.cellText(1, 1);
+})(), "7");
+
+console.log("\n=== keyed 复用：依赖标签按地址保留节点（F6）===");
+h.clickCell(1, 1); // B2：被 SUM/AVERAGE 等区间引用
+const chipsB2 = h.byClass("chip-cell").slice();
+const byAddress = {};
+chipsB2.forEach((c) => { byAddress[String(c.textContent)] = c; });
+h.clickCell(2, 1); // B3：依赖集合部分重叠 → 重叠的地址应复用同一节点
+const chipsB3 = h.byClass("chip-cell");
+const stillThere = Object.keys(byAddress).filter((addr) => chipsB3.some((c) => String(c.textContent) === addr));
+ok(`选区变化后重叠的依赖标签有 ${stillThere.length} 个`, stillThere.length > 0, "没有重叠标签，断言无效");
+stillThere.forEach((addr) => {
+  const after = chipsB3.find((c) => String(c.textContent) === addr);
+  ok(`依赖标签 ${addr} 仍是同一 DOM 对象`, after === byAddress[addr], "节点被换了");
+});
+const fresh = chipsB3.find((c) => !byAddress[String(c.textContent)]);
+ok("新出现的依赖标签是新节点（key 决定身份，不是位置）",
+   fresh && !chipsB2.includes(fresh), fresh ? String(fresh.textContent) : "无新标签");
+
 console.log("\n=== 编辑态下的键盘语义 ===");
 h.clickCell(1, 1);
 const rawBefore = state().raw; // 该格此刻的内容（前面被清空过，故用相对断言）
@@ -188,10 +260,22 @@ h.fireKey("ArrowDown");
 eq("非编辑态方向键继续导航", state().sel, "B3");
 
 console.log("\n=== 埋点面板 ===");
-const dbg = h.all(h.roots["panel-debug"]).map((n) => n.textContent).join(" ");
+const dbg = h.all(h.roots["app"]).map((n) => n.textContent).join(" ");
 ok("显示挂载耗时", /挂载耗时/.test(dbg));
 ok("显示累计 Effect 重跑", /累计 Effect 重跑/.test(dbg));
 ok("显示信号对象数", /信号对象/.test(dbg));
+
+console.log("\n=== 卸载：生命周期收尾（面板自己的订阅与定时器随组件一起回收）===");
+eq("卸载前有 grid 的 ticker", h.intervalCount() > 0, true);
+h.unmountAll();
+eq("挂载点已清空", h.byClass("cell").length, 0);
+eq("网格行已清空", h.byClass("grid-row").length, 0);
+ok("公式栏输入框已移除", !h.inputEl(), h.inputEl());
+eq("面板自己的定时器已停", h.intervalCount(), 0);
+eq("window 级键盘监听已解绑", h.windowKeyHandlerCount(), 0);
+const selBeforeUnmount = state().sel;
+h.fireKey("ArrowDown");
+eq("卸载后按键不再改变状态", state().sel, selBeforeUnmount);
 
 const final = state();
 console.log(`\n最终：选中 ${final.sel} · 填充 ${final.filled} 格 · 公式 ${final.formulas} 个 · 错误 ${final.errors} 格`);
