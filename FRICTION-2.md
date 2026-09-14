@@ -244,7 +244,7 @@ Tab 提交并右移、⌘Z/⌘⇧Z、⌘B、⌘↑↓←→ 跳到边缘 —— 
 |---|---|---|---|---|
 | `1 / 4 == 0.25`（整数除法返浮点） | **设计选择** | `docs/unsupported_features.md` §Integer / Float difference 明文记录；issue #748 / #505 已 closed | 能改，但会与 corelib 的 `Number`(= JS number) 模型全面冲突，且让 Citrine 行为与其它 Opal 用户不一致 | ❌ 不 fork，Citrine 侧 `Num.idiv` |
 | `String#<<` / `#gsub!` 不存在 | **设计选择** | 同上 §Mutable Strings（"所有字符串不可变"） | 不能（corelib 全建立于不可变 JS 字符串） | ❌ 不 fork，文档 + 用 `+` |
-| `Float#round` 负数半值方向（`-1.5.round` → `-1`，Ruby 是 `-2`） | **真 bug**：用 `Math.round`（朝 +∞）而**同一个方法里的整数分支**已经用"绝对值 + floor"（远离零），自相矛盾 | 未找到对应 issue（#572 是"`round(2)` 返回整数"那个老问题，已修） | 能，**4 行** | ✅ **提 PR**（附 mspec 用例） |
+| `Float#round` 负数半值方向（`-1.5.round` → `-1`，Ruby 是 `-2`） | **真 bug**：用 `Math.round`（朝 +∞）而**同一个方法里的整数分支**已经用"绝对值 + floor"（远离零），自相矛盾 | 提 PR 前未找到对应 issue（#572 是"`round(2)` 返回整数"那个老问题，已修）→ **已提 [opal/opal#2808](https://github.com/opal/opal/pull/2808)**（2026-09-14） | 能，**4 行** | ✅ **已提 PR**（附 mspec 用例；master 上 fail、补丁后 pass 均已实测） |
 | 反引号里插值 `Native` 包装对象 / 方法改名规则 / 变量遮蔽 JS 全局 | 互操作语义 + **文档缺口** | 非 bug | 不能 | ✅ 提文档 PR（见 G-6 的归因更正） |
 
 ### 7.2 为什么 fork 的成本远高于收益
@@ -265,7 +265,7 @@ Tab 提交并右移、⌘Z/⌘⇧Z、⌘B、⌘↑↓←→ 跳到边缘 —— 
 | 层 | 做法 | 成本 | 何时做 |
 |---|---|---|---|
 | **L0** | Citrine 侧兜底：`Citrine::Num`、README 的"Opal 陷阱清单" | 低 | **现在** |
-| **L1** | 给上游提 PR：① `Float#round` 修复（附 mspec）；② 把真实应用的陷阱补进 `docs/unsupported_features.md` | 中低 | 想提就提，**提了不亏**：合入即零维护 |
+| **L1** | 给上游提 PR：① `Float#round` 修复（附 mspec）——**已提 [opal/opal#2808](https://github.com/opal/opal/pull/2808)**；② 把真实应用的陷阱补进 `docs/unsupported_features.md` | 中低 | 想提就提，**提了不亏**：合入即零维护 |
 | **L2** | 个别修复未及时合入而我们又急需 → `gem "opal", github: "opal/opal"` **钉某个 commit**（比 fork 便宜一个数量级），或在 Citrine 内做**带版本守卫**的运行时补丁（上游修好后自动失效） | 中 | 真被阻塞时 |
 | **L3** | 真 fork：fork + 极小 patch 系列 + 每晚 rebase 上游并跑 Citrine 全量测试的 CI + 发 `citrine-opal` gem | 高 | **仅在触发器命中时** |
 
@@ -287,8 +287,17 @@ Opal 1.8.3 `opal/corelib/number.rb` 的 `Float#round` 分支用 `Math.round`（�
 `var f = Math.pow(10, ndigits), x = Math.floor(Math.abs(self) * f + 0.5) / f; return self < 0 ? -x : x;`
 ```
 
-**实测校验**（本机 node 与 CRuby 11 组对照，含 `-1.35.round(1)`、`±2.675.round(2)` 这类边界）：
-提案实现 **11/11 与 Ruby 一致**，当前实现错 5 组。
+**实测校验**（本机 node 与 CRuby 17 组对照，含 `-1.35.round(1)`、`±2.675.round(2)` 这类边界）：
+提案实现 **17/17 与 Ruby 一致**，当前实现错 5 组。
+
+**上游验证**（[opal/opal#2808](https://github.com/opal/opal/pull/2808)，2026-09-14）：新增
+`spec/opal/core/number/round_spec.rb`，在 master 上 `4 examples, 2 failures`（`-0.5` 得 `-0.0`、
+`-1.25.round(1)` 得 `-1.2`），补丁后 `4 examples, 0 failures`；上游既有
+`spec/ruby/core/float/round_spec.rb`（11 例）、`integer/round_spec.rb`（10 例）无回归，
+`rake mspec_opal_nodejs` 全量 697 例全绿。
+
+**顺带发现**：ruby/spec 的 `Float#round` 对负数只测 `-1.4` / `-2.8`，**从不测恰好半值**——
+这正是该 bug 能长期潜伏的原因，也说明"上游 spec 全绿"不等于"语义对齐 MRI"。
 
 ```
 -1.5.round    Ruby -2    Opal -1    → 提案 -2
