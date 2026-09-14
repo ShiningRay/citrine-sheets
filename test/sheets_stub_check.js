@@ -89,9 +89,10 @@ h.fireKey("2");
 h.typeInInput("99000");
 h.pressEnterInInput();
 const editNodes = h.nodesCreated();
-// 组成：闪烁标注 27 格×2 + 面板重绘（检查器/状态栏/埋点各自重建内容块）
+// 组成：面板重绘（检查器/状态栏/埋点各自重建内容块）
+// 单元格不在此列：G-2 之后闪烁只重设属性（从前闪烁 27 格要新建 54 个中层节点）
 ok(`改一个数新建 DOM 节点 ${editNodes} 个（< 300）`, editNodes < 300, editNodes);
-ok(`节点来源分解：${s.nodes}`, String(s.nodes).includes("cell-chrome"), s.nodes);
+ok(`数据编辑不新建任何单元格节点：${s.nodes}`, !/cell/.test(String(s.nodes)), s.nodes);
 eq("B4 已写入", h.cellText(3, 1), "99,000");
 
 console.log("\n=== 检查器：依赖与反向依赖可点击跳转 ===");
@@ -144,8 +145,8 @@ eq("设置 2 位小数", state().val, "150,000.00");
 h.clickChip("0 位");
 eq("设置 0 位小数", state().val, "150,000");
 h.clickChip("B 加粗");
-const chrome = h.cellEl(1, 1).children[0];
-ok("加粗类名生效", h.matchClass(chrome, "is-bold"), chrome ? chrome.className : "无中层节点");
+const chrome = h.cellEl(1, 1); // G-2 后外观类名就在单元格节点上（不再有中层）
+ok("加粗类名生效", h.matchClass(chrome, "is-bold"), chrome ? chrome.className : "无单元格节点");
 
 console.log("\n=== 清空与撤销重做 ===");
 h.clickChip("清空选区");

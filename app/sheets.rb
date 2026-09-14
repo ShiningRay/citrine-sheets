@@ -20,7 +20,7 @@ require_relative "panels/grid"
 require_relative "panels/inspector"
 require_relative "panels/status_bar"
 require_relative "panels/debug_bar"
-require_relative "glue"
+require_relative "test_api"
 
 Sheets::Telemetry.install!
 
@@ -41,6 +41,4 @@ Sheets::Telemetry.reset_round! # 挂载不算"一次编辑"
 # 埋点面板最后挂载：这样它首次渲染就能显示真实挂载耗时，且本轮计数从 0 开始
 Citrine::DomRenderer.mount_at("panel-debug", Sheets::Panels::DebugBar.new(app))
 
-glue = Sheets::Glue.new(app)
-glue.start
-glue.expose_test_api
+Sheets::TestApi.expose(app)

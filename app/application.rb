@@ -247,6 +247,66 @@ module Sheets
       self
     end
 
+    # ── 键盘（G-9：GridPanel 用 window_key 绑定，逻辑仍在 App）────────
+    #
+    # ev 是框架归一化的 Citrine::KeyEvent（key / 修饰键谓词 / prevent_default），
+    # 键盘逻辑不再直接碰原生事件对象。
+    def handle_key(ev)
+      key = ev.key
+      shift = ev.shift?
+      target = ev.raw && ev.raw[:target]
+      tag = target ? target[:tagName].to_s.upcase : ""
+
+      # 编辑框内：Esc / Tab 由输入框自己的 on_key 处理（见 FormulaBar），
+      # 其余按键留给输入法与光标，全局层不接管
+      return self if tag == "INPUT"
+      return handle_meta(ev, key, shift) if ev.command?
+
+      case key
+      when "ArrowUp" then swallow(ev) { move(-1, 0, extend: shift) }
+      when "ArrowDown" then swallow(ev) { move(1, 0, extend: shift) }
+      when "ArrowLeft" then swallow(ev) { move(0, -1, extend: shift) }
+      when "ArrowRight" then swallow(ev) { move(0, 1, extend: shift) }
+      when "Enter" then swallow(ev) { start_edit }
+      when "Tab" then swallow(ev) { move(0, shift ? -1 : 1) }
+      when "Escape" then set_notice(:info, "方向键移动 · 直接打字即编辑 · Enter 编辑 · Esc 取消")
+      when "Delete" then swallow(ev) { clear_selection }
+      when "Backspace" then swallow(ev) { start_edit("") }
+      else
+        # 可打印字符 → 直接开始编辑（Excel 的习惯）
+        swallow(ev) { start_edit(key) } if key.length == 1 && !ev.alt?
+      end
+      self
+    end
+
+    def handle_meta(ev, key, shift)
+      case key
+      # 注意：裸写 redo 是 Ruby 关键字（重启块）而非方法调用——必须带接收者
+      when "z", "Z" then swallow(ev) { shift ? self.redo : undo }
+      when "b", "B" then swallow(ev) { apply_chrome(bold: !workbook.chrome(@active_row, @active_col)[:bold]) }
+      when "s", "S" then swallow(ev) { set_notice(:info, "这是本地模拟表格，没有文件保存") }
+      when "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"
+        dr, dc = arrow_delta(key)
+        swallow(ev) { jump(dr, dc, extend: shift) }
+      end
+      self
+    end
+
+    def swallow(ev)
+      ev.prevent_default
+      yield
+      self
+    end
+
+    def arrow_delta(key)
+      case key
+      when "ArrowUp" then [-1, 0]
+      when "ArrowDown" then [1, 0]
+      when "ArrowLeft" then [0, -1]
+      else [0, 1]
+      end
+    end
+
     # ── 视图态信号（按更新频率拆分，见 Workbook 的说明）────────
 
     def view_signal(row, col)

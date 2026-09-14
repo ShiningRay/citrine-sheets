@@ -20,11 +20,15 @@ module Sheets
           box(css_class: "fx-row") do # 不读信号：输入框必须挂在这里
             label(css_class: "fx-name num") { app.selection_label }
             label(css_class: "fx-sym") { "fx" }
-            @input = text_input(
+            text_input(
               value: app.edit_text,
               placeholder: "输入数值、文本，或以 = 开头的公式",
               on_enter: :commit_from_enter,
-              css_class: "fx-input"
+              ref: :input,
+              css_class: "fx-input",
+              # 元素级键盘（G-9）：从前靠外挂层判断 event.target 是不是 INPUT，
+              # 现在由输入框自己声明它在编辑态要接管的键
+              on_key: { "Escape" => :cancel_edit_key, "Tab" => :commit_tab }
             )
             box(css_class: "fx-buttons") do
               chip("确认 ↵", false, -> { app.commit_edit(1, 0) }, "chip-primary")
@@ -45,13 +49,26 @@ module Sheets
         app.on_enter_commit
       end
 
-      # ── 原生焦点控制（v1 无 ref / 生命周期，只能由 App 持引用调用）──
+      # 元素级键盘（G-9）：处理器收到框架归一化的 KeyEvent
+      def cancel_edit_key
+        app.cancel_edit
+      end
+
+      def commit_tab(ev)
+        ev.prevent_default # Tab 不该把焦点移走
+        app.commit_edit(0, ev.shift? ? -1 : 1)
+      end
+
+      # ── 原生焦点控制 ────────────────────────────────────────
       #
-      # 注意：这里必须走 Ruby 侧方法调用——Native::Object 会把 focus/blur 转发给
-      # 底层 JS 对象。若写进反引号里插值，`#{el}` 得到的是包装器对象本身而非
-      # DOM 元素，`el.focus` 会是 undefined（实测踩过，见 FRICTION-2 的 G-6）。
+      # 元素句柄由框架的 ref: 提供（G-10）：refs[:input] 就是 DOM 元素本身，
+      # 不再需要"App 持有组件实例 → 组件持有 node → node.dom"那条链。
+      #
+      # 注意：必须走 Ruby 侧方法调用——Native::Object 会把 focus/blur 转发给底层
+      # JS 对象；若写进反引号里插值，`#{el}` 得到的是包装器对象本身而非 DOM 元素，
+      # `el.focus` 会是 undefined（实测踩过，见 FRICTION-2 的 G-5）。
       def focus_input
-        el = @input&.dom
+        el = refs[:input]
         return self unless el
 
         el.focus
@@ -60,7 +77,7 @@ module Sheets
       end
 
       def blur_input
-        el = @input&.dom
+        el = refs[:input]
         return self unless el
 
         el.blur
@@ -75,9 +92,9 @@ module Sheets
 
       # 桩诊断用：报告节点与原生方法可见性
       def debug_focus_state
-        el = @input&.dom
+        el = refs[:input]
         active = Native(`document.activeElement`)
-        "input_assigned=#{!@input.nil?} dom_assigned=#{!el.nil?} " \
+        "input_assigned=#{!el.nil?} dom_assigned=#{!el.nil?} " \
           "has_focus=#{`typeof #{Native(el)}.focus`} " \
           "active=#{active ? active[:className].to_s : 'none'}"
       end

@@ -133,25 +133,27 @@
     .head-inner.is-on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
     .head-text { font-size: 11px; }
 
-    /* 单元格三层结构：cell（静态布局）> cell-chrome（外观/选中态）> cell-text（值） */
+    /* 单元格两层结构：cell（静态槽 + 响应式 class/style）> cell-text（值）。
+       G-2 之前是三层（cell > cell-chrome > cell-text）：props 只能在创建时求值，
+       外观订阅必须关进一个中层容器；现在 css_class/style 传 Proc，
+       外观变化只重设属性、不重建节点，中层因此消失。 */
     .cell {
       flex: 0 0 84px; width: 84px; height: 22px;
       border-right: 1px solid var(--line-soft);
       border-bottom: 1px solid var(--line-soft);
       cursor: cell; overflow: hidden; position: relative; background: var(--cell);
+      display: flex; align-items: center; padding: 0 6px; transition: background .12s;
     }
-    .cell-chrome { width: 100%; height: 100%; display: flex; align-items: center;
-                   padding: 0 6px; background: var(--cell); transition: background .12s; }
     .cell-text { font-size: 12px; white-space: nowrap; overflow: hidden;
                  text-overflow: ellipsis; }
-    .cell-chrome.is-num .cell-text { text-align: right; width: 100%; }
-    .cell-chrome.is-bold .cell-text { font-weight: 700; }
-    .cell-chrome.is-err .cell-text { color: var(--danger); font-weight: 600; }
-    .cell-chrome.is-sel { outline: 2px solid var(--accent); outline-offset: -2px;
-                          background: #16294a; z-index: 1; }
-    .cell-chrome.is-flash { background: var(--flash-soft); }
-    .cell-chrome.is-sel.is-flash { background: #2b3448; }
-    .cell:hover .cell-chrome { background: #132039; }
+    .cell.is-num .cell-text { text-align: right; width: 100%; }
+    .cell.is-bold .cell-text { font-weight: 700; }
+    .cell.is-err .cell-text { color: var(--danger); font-weight: 600; }
+    .cell.is-sel { outline: 2px solid var(--accent); outline-offset: -2px;
+                   background: #16294a; z-index: 1; }
+    .cell.is-flash { background: var(--flash-soft); }
+    .cell.is-sel.is-flash { background: #2b3448; }
+    .cell:hover { background: #132039; }
 
     /* ── 检查器 / 状态栏 / 埋点 ───────────────────────────── */
     .ins-body { gap: 2px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }

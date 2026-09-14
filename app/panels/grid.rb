@@ -1,5 +1,7 @@
+# backtick_javascript: true
 # frozen_string_literal: true
 
+require "native"
 require "citrine"
 require_relative "common"
 require_relative "../format"
@@ -75,36 +77,37 @@ module Sheets
         end
       end
 
-      # 单个单元格：三层结构，每层只订阅一类信号。
+      # 单个单元格：**两层**结构。
       #
-      # 为什么必须三层？v1 的 props 在**创建节点时**求值（apply_props 只在挂载时跑），
-      # 而 `box(css_class: ...)` 的实参是在**外层块的执行中**求值的 —— 也就是说：
-      # 谁调用 cell_class()，谁的 Effect 就订阅了这一格的信号。若把单元格直接建在
-      # 行块里，行块就会订阅整行 26 格的信号，改任何一格都会重建整行
-      # （实测：一次编辑新建 1903 个 DOM 节点）。隔离出一个单元，必须多包一层容器。
+      # G-2 之前这里必须三层：props 的实参在**外层块的执行中**求值，谁调用
+      # cell_class() 谁的 Effect 就订阅了这一格的信号——所以得再包一层，
+      # 把订阅关进"中层"（改一格要用 2 个新建节点换一次属性更新）。
+      # 现在 `css_class:` / `style:` 直接传 Proc：求值发生在本节点的属性 Effect 内，
+      # 订阅收敛到这一格、重跑只重设属性，**0 个新建节点**——中层因此可以去掉。
       #
-      #   cell（静态：尺寸/边框/点击）        ← 由行块创建，不读任何信号
-      #     cell-chrome（外观：选中/错误/加粗/底色/对齐） ← 读本格 chrome+view
-      #       cell-text（值）                            ← 读本格值信号，只改文字
+      #   cell（静态槽：尺寸/边框/点击 + 响应式 class/style）
+      #     cell-text（值）   ← 读本格值信号，只改文字
       def render_cell(row, col)
-        box(css_class: "cell", on_click: -> { app.select_cell(row, col) }) do
-          box(css_class: cell_class(row, col), style: cell_style(row, col)) do
-            label(css_class: "cell-text") { cell_text(row, col) }
-          end
+        box(
+          css_class: -> { "cell #{cell_flags(row, col)}" },
+          style: -> { cell_style(row, col) },
+          on_click: -> { app.select_cell(row, col) }
+        ) do
+          label(css_class: "cell-text") { cell_text(row, col) }
         end
       end
 
-      # 中层：读 chrome（格式/错误态/类型）+ view（选中/闪烁）
-      def cell_class(row, col)
+      # 响应式属性：读 chrome（格式/错误态/类型）+ view（选中/闪烁）
+      def cell_flags(row, col)
         chrome = app.workbook.chrome_signal(row, col).get
         view = app.view_signal(row, col).get
-        classes = ["cell-chrome"]
-        classes << "is-num" if chrome[:kind] == :number
-        classes << "is-err" if chrome[:error]
-        classes << "is-sel" if view[:selected]
-        classes << "is-flash" if view[:flash]
-        classes << "is-bold" if chrome[:bold]
-        classes.join(" ")
+        flags = []
+        flags << "is-num" if chrome[:kind] == :number
+        flags << "is-err" if chrome[:error]
+        flags << "is-sel" if view[:selected]
+        flags << "is-flash" if view[:flash]
+        flags << "is-bold" if chrome[:bold]
+        flags.join(" ")
       end
 
       def cell_style(row, col)
@@ -122,11 +125,37 @@ module Sheets
     end
 
     # 网格挂载根：一个组件 = 一整块区域（v1 无组件嵌套，见 FRICTION F5）
+    #
+    # 全局键盘与定时器在这里落地（G-9 / G-10）：
+    #   · window_key  —— window 级 keydown，随组件卸载自动解绑（从前是外挂层自己
+    #     持 window 引用 + beforeunload 清理）
+    #   · on_mount/on_unmount —— 定时器的起与停交给框架生命周期
+    # 键盘逻辑本身仍归 Application（它才是状态的持有者），组件只负责"绑"。
     class GridPanel < Panel
       include Grid
 
+      TICK_MS = 110
+
+      window_key :global_key
+      on_mount :start_ticker
+      on_unmount :stop_ticker
+
       def view
         render_grid
+      end
+
+      def global_key(ev)
+        app.handle_key(ev)
+      end
+
+      # 定时清理上一次编辑的闪烁标注（框架无调度器，用原生定时器 + 生命周期管理）
+      def start_ticker
+        @ticker = Native(`window`).setInterval(-> { app.tick_visuals }, TICK_MS)
+      end
+
+      def stop_ticker
+        Native(`window`).clearInterval(@ticker) if @ticker
+        @ticker = nil
       end
     end
   end
