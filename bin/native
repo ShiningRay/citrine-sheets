@@ -15,10 +15,14 @@
 # 这里只做"目录存在性"的早失败提示——和 bin/dev 同一个风格。
 repo_root = File.expand_path("..", __dir__)
 
-{
+gtk_backend = ENV.fetch("CITRINE_BACKEND", "libui") == "gtk"
+
+checks = {
   "CITRINE_ROOT" => ["citrine", File.expand_path("../citrine", repo_root)],
   "CITRINE_NATIVE_ROOT" => ["citrine-native", File.expand_path("../citrine-native", repo_root)]
-}.each do |env, (name, default)|
+}
+checks["CITRINE_NATIVE_GTK_ROOT"] = ["citrine-native-gtk", File.expand_path("../citrine-native-gtk", repo_root)] if gtk_backend
+checks.each do |env, (name, default)|
   dir = ENV[env] || default
   next if File.directory?(File.join(dir, "lib"))
 

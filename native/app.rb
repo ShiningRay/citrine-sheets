@@ -25,6 +25,17 @@ $LOAD_PATH.unshift(app_lib) unless $LOAD_PATH.include?(app_lib)
 require "citrine"
 require "citrine/native"
 require "citrine-native-libui" # 加载即登记后端 :libui 并设为默认
+
+# 试验开关：CITRINE_BACKEND=gtk 时改用 GTK3 后端（CSS 主题可作用于原生控件，
+# 见 citrine-native-gtk 仓库）；默认 libui。
+widgets = nil
+if ENV.fetch("CITRINE_BACKEND", "libui") == "gtk"
+  gtk_lib = File.join(ENV["CITRINE_NATIVE_GTK_ROOT"] || File.expand_path("../citrine-native-gtk", repo_root), "lib")
+  $LOAD_PATH.unshift(gtk_lib) unless $LOAD_PATH.include?(gtk_lib)
+  require "citrine-native-gtk"
+  widgets = Citrine::Native::Widgets::Gtk.new
+end
+WIDGETS = widgets
 require_relative "../app/application"
 require_relative "../app/seed"
 require_relative "../app/telemetry"
@@ -161,7 +172,7 @@ module Sheets
         # signals: :default —— Ctrl+C / SIGTERM 走"退出主循环 → 有序拆解"（框架按
         # `Signal.list` 过滤平台实际存在的信号，见 App#trap_quit!）。在此之前这里是硬杀：
         # libui 的控件销毁记账会整个跳过。
-        Citrine::Native.run(build, signals: :default, **DEFAULT_WINDOW.merge(options))
+        Citrine::Native.run(build, widgets: WIDGETS, signals: :default, **DEFAULT_WINDOW.merge(options))
       end
     end
   end
