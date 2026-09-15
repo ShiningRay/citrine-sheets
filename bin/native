@@ -1,0 +1,34 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# 原生窗口启动器（CRuby + libui，不经 Opal / 浏览器）：
+#
+#   bin/native
+#
+# 需要的三个仓库与依赖：
+#   · 本仓库（逻辑 app/ + 原生视图 native/）
+#   · citrine（框架）            默认 ../citrine，可用 CITRINE_ROOT 覆盖
+#   · citrine-native（原生运行时）默认 ../citrine-native，可用 CITRINE_NATIVE_ROOT 覆盖
+#   · libui 动态库（gem libui；本机装在 asdf 的 Ruby 3.4.8 下）
+#
+# 加载路径由 native/app.rb 自己引导（同一份逻辑在两种跑法下一致），
+# 这里只做"目录存在性"的早失败提示——和 bin/dev 同一个风格。
+repo_root = File.expand_path("..", __dir__)
+
+{
+  "CITRINE_ROOT" => ["citrine", File.expand_path("../citrine", repo_root)],
+  "CITRINE_NATIVE_ROOT" => ["citrine-native", File.expand_path("../citrine-native", repo_root)]
+}.each do |env, (name, default)|
+  dir = ENV[env] || default
+  next if File.directory?(File.join(dir, "lib"))
+
+  abort <<~MSG
+    找不到 #{name}：#{dir}
+    请把三个仓库放在同一父目录下，或设置：
+      export #{env}=/path/to/#{name}
+  MSG
+end
+
+require_relative "../native/app"
+
+Sheets::Native.run!

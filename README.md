@@ -49,6 +49,15 @@ bin/dev                 # → http://localhost:4404/sheets.html
 rake check              # 单测 + 桩验收 + 跨平台一致性（提交前跑）
 ```
 
+**原生窗口（CRuby + libui，不经 Opal）**：
+
+```bash
+# 额外依赖：citrine-native 与本仓库同级（CITRINE_NATIVE_ROOT 可覆盖）、gem libui
+bin/native              # 直接起原生窗口，逻辑复用 app/，视图换成 native/views/**
+
+rake native:test        # 原生端口测试（Memory 桩后端，无窗口）
+```
+
 | 命令 | 作用 |
 |---|---|
 | `bin/dev` | 开发服务器（包装 citrine 的 dev server，端口 4404，支持 `-p` 覆盖） |
@@ -56,7 +65,9 @@ rake check              # 单测 + 桩验收 + 跨平台一致性（提交前跑
 | `rake build` | 编译 `app/sheets.rb` → `app/sheets.js` |
 | `rake stubs` | Node DOM 桩验收（116 项键盘、编辑链路与复用语义断言，不需要浏览器） |
 | `rake parity` | CRuby 与 Opal 两侧内核输出**逐字节**比对（95 行） |
-| `rake check` | 以上全部 |
+| `rake native:test` | 原生端口测试（绘制序列 + 事件路径，Memory 桩后端，无窗口） |
+| `bin/native` | 原生窗口（CRuby + libui；见下节） |
+| `rake check` | 以上全部（不含原生） |
 
 ## 操作
 
@@ -117,6 +128,9 @@ rake check              # 单测 + 桩验收 + 跨平台一致性（提交前跑
 | 装配 | `rake stubs`（Node DOM 桩，116 项） | 单根组件树挂载、点选与键盘导航、选区扩展与聚合、直接打字即编辑、提交与依赖链联动、格式、清空、撤销重做、循环引用、依赖跳转、闪烁、**复用语义（结构变更后节点身份 / 输入框存活 / 依赖标签按 key 复用）**、渲染开销量化 |
 | 一致性 | `rake parity` | 同一份内核在 CRuby 与 Opal 下输出逐字节一致（95 行）——表格引擎到处是除法与取整，这是跨平台语义差异的重灾区 |
 
+**原生端口**（第四种跑法，见下节）：`rake native:test` 用 Memory 桩后端断言"画了什么"
+与事件路径（无窗口）；`bin/native` 起真 libui 窗口，逻辑与浏览器侧完全共用 `app/application.rb`。
+
 浏览器侧实测（headless Chrome，`bin/dev` 起服务）：六个面板与 1560 格正常渲染
 （`.grid-scroll` 358×460、内容 2230px 可横向滚动、页面无横向溢出）、控制台零报错；
 方向键/Shift 扩展/直接打字编辑/Esc 取消/⌘Z 全部生效；
@@ -138,7 +152,41 @@ rake check              # 单测 + 桩验收 + 跨平台一致性（提交前跑
 > ——差别只在于 props 写在哪一层求值，见 FRICTION-2 的 G-2。
 > 迁移前的数字（210 / 58）与迁移后的对比见 FRICTION-2 §9.4。
 
-## 已知取舍
+## 原生端口（citrine-native）
+
+同一份逻辑挂到 [citrine-native](https://github.com/ShiningRay/citrine-native) 的原生窗口
+（CRuby + libui，不经 Opal/浏览器）。**逻辑零复制**：`Sheets::Native::NativeApp < Sheets::Application`
+只覆盖 `view` 与键盘入口，选区/编辑/撤销/格式/重算全部复用 `app/application.rb`。
+
+```
+├── bin/native               # 启动器（三个仓库的加载路径 + 早失败提示）
+├── native/
+│   ├── app.rb               # ★ NativeApp（只覆盖 view + global_key/edit_key）+ 窗口默认值
+│   ├── theme.rb             # 配色常量（与 sheets.html 的 :root 设计令牌同名同值）
+│   ├── views/grid.rb        # ★ 网格 = 一个自绘面板（area）：一次 on_draw 画完 1560 格
+│   ├── views/panels.rb      # 工具条/公式栏/检查器/状态栏/埋点（原生 label + button + text_input）
+│   ├── README.md            # 原生侧的**操作表 + 平台限制**（中文怎么输入、焦点、布局坑）
+│   └── test/                # CRuby 测试：绘制序列 + 事件路径（Memory 桩后端，无窗口）
+```
+
+差异只在**平台能力**，都有对应位置与注释（逐条限制与实测数字见 [native/README.md](native/README.md)）：
+
+| 浏览器侧 | 原生侧 |
+|---|---|
+| 1560 个单元格节点 + 逐格信号 | 一个 `element(:area, scroll: true)` 自绘面板：列头/行号/网格线/值/选中/闪烁一次画完（空白格不出 `text` 调用，整块约 200 个图元） |
+| `window_key` 全局键盘（`<input>` 挡住的部分由 Application 判断 `target.tagName`） | 同一个 `window_key :global_key`，但由聚焦的 area 转发；DOM 的 `tagName == "INPUT"` 判据换成"原生 entry 的按键本来就到不了 window 层"；焦点在窗口显示+激活之后取（晚到自动撤提示，见 SHEETS-1c 的 D1） |
+| Enter/Tab/Esc 由 `<input>` 自己接管（`FormulaBar` 的 `on_enter`/`on_key`） | `NativeApp#edit_key`：编辑态下 Enter 提交、Tab 提交并横移、Esc 取消、Backspace 删字符、可打印字符追加（libui 的 entry 拿不到按键）；方向键在编辑态与浏览器一致地"什么都不做" |
+| 公式栏输入框 watch `edit_mode` 自己 focus/blur | 原生侧没有"程序化 focus entry"的 API（libui 无 `uiControlSetFocus`），故打字流由 area 接管，鼠标点输入框可继续改（**中文只能走这条路**：非 ASCII 键入到不了网格） |
+| `.cell { overflow: hidden }` + `text-overflow: ellipsis` | 单元格文本 `clip` 到格的内容框，左对齐超宽时截断加「…」（右对齐的数字裁行首、不加省略号，与浏览器一致） |
+| `GridPanel` 的 `setInterval` 清闪烁 | `Citrine::Native.every(150) { clear_flash }`（框架定时器 API） |
+| CSS 类名/kebab 样式 | `native/theme.rb` 的常量 + `Painter` 的颜色/字重参数（背景/边框类样式在原生侧不做） |
+
+**布局坑（SHEETS-1c 的 D2）**：根元素必须**自己**声明 `style: { flex_grow: 1 }`——框架把根元素
+追加进窗口根容器时的 stretchy 取自根元素自己的样式，不声明就只有内容自然高度（窗口下半空白、
+里面所有 flex_grow 都分不到空间；实测网格可见区从 578×214 变 579×667）。
+
+
+
 
 - 不支持合并单元格、行列宽高调整、拖拽填充、多工作表
 - 行列数可以变（`Workbook#resize` → 结构信号 → 网格按 key 复用），

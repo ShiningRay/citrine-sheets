@@ -1,7 +1,10 @@
 # backtick_javascript: true
 # frozen_string_literal: true
 
-require "native"
+# `native` 是 Opal 专有库（下面的 `Native(...)` 只出现在浏览器侧的闪烁 ticker 里）；
+# CRuby 下 require 它会 LoadError，而原生端口（native/）要复用同一份 Sheets::Application
+# 逻辑 → 按引擎探测条件加载。浏览器路径行为不变（Opal 下 defined?(Opal) 为真）。
+require "native" if defined?(Opal)
 require "citrine"
 require_relative "common"
 require_relative "../format"

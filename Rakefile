@@ -49,6 +49,18 @@ task stubs: :build do
   sh "node test/sheets_stub_check.js"
 end
 
+NATIVE_ROOT = ENV["CITRINE_NATIVE_ROOT"] || File.expand_path("../citrine-native", ROOT)
+NATIVE_LIB = File.join(NATIVE_ROOT, "lib")
+
+desc "原生端口测试（CRuby + citrine-native 的 Memory 桩后端，无需窗口）"
+Rake::TestTask.new("native:test") do |t|
+  t.libs << APP
+  t.libs << CITRINE_LIB
+  t.libs << NATIVE_LIB
+  t.test_files = FileList["native/test/*_test.rb"]
+  t.warning = false
+end
+
 desc "CRuby 与 Opal 两侧内核输出一致性检查（跨平台语义回归防护）"
 task :parity do
   check_citrine!
