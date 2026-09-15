@@ -156,7 +156,10 @@ module Sheets
       end
 
       def run!(**options)
-        Citrine::Native.run(build, **DEFAULT_WINDOW.merge(options))
+        # signals: :default —— Ctrl+C / SIGTERM 走"退出主循环 → 有序拆解"（框架按
+        # `Signal.list` 过滤平台实际存在的信号，见 App#trap_quit!）。在此之前这里是硬杀：
+        # libui 的控件销毁记账会整个跳过。
+        Citrine::Native.run(build, signals: :default, **DEFAULT_WINDOW.merge(options))
       end
     end
   end
