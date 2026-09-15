@@ -13,7 +13,8 @@
 repo_root = File.expand_path("..", __dir__)
 {
   "CITRINE_ROOT" => "citrine",
-  "CITRINE_NATIVE_ROOT" => "citrine-native"
+  "CITRINE_NATIVE_ROOT" => "citrine-native",            # 核心包（Renderer/App/协议）
+  "CITRINE_NATIVE_LIBUI_ROOT" => "citrine-native-libui" # libui 后端（Widgets::Libui）
 }.each do |env, name|
   lib = File.join(ENV[env] || File.expand_path("../#{name}", repo_root), "lib")
   $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
@@ -23,6 +24,7 @@ $LOAD_PATH.unshift(app_lib) unless $LOAD_PATH.include?(app_lib)
 
 require "citrine"
 require "citrine/native"
+require "citrine-native-libui" # 加载即登记后端 :libui 并设为默认
 require_relative "../app/application"
 require_relative "../app/seed"
 require_relative "../app/telemetry"
