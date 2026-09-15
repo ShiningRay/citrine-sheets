@@ -91,7 +91,9 @@ rake native:test        # 原生端口测试（Memory 桩后端，无窗口）
 ```
 ├── app/
 │   ├── sheets.rb            # 浏览器入口：挂载唯一的根组件（#app）
-│   ├── sheets.html          # 页面外壳（设计令牌 / 网格与面板样式 + 挂载点）
+│   ├── sheets.html          # 页面外壳（挂载点 + 外链 styles.css；令牌在 tokens.rb）
+│   ├── tokens.rb            # 设计令牌唯一来源（浏览器 CSS / 视图 / 原生 theme 三处共用）
+│   ├── styles.css           # 浏览器样式表（规则经 var(--x) 引用令牌，无字面量色值）
 │   ├── application.rb       # ★ 根组件：共享模型（选区/编辑/格式/撤销）+ 组件树骨架
 │   ├── workbook.rb          # ★ 工作簿：单元格、依赖图、拓扑重算、循环检测、信号发布
 │   ├── formula.rb           # 公式语言：词法 + 递归下降解析 + 静态依赖提取
@@ -162,7 +164,7 @@ rake native:test        # 原生端口测试（Memory 桩后端，无窗口）
 ├── bin/native               # 启动器（三个仓库的加载路径 + 早失败提示）
 ├── native/
 │   ├── app.rb               # ★ NativeApp（只覆盖 view + global_key/edit_key）+ 窗口默认值
-│   ├── theme.rb             # 配色常量（与 sheets.html 的 :root 设计令牌同名同值）
+│   ├── theme.rb             # 配色常量（全部从 app/tokens.rb 派生）
 │   ├── views/grid.rb        # ★ 网格 = 一个自绘面板（area）：一次 on_draw 画完 1560 格
 │   ├── views/panels.rb      # 工具条/公式栏/检查器/状态栏/埋点（原生 label + button + text_input）
 │   ├── README.md            # 原生侧的**操作表 + 平台限制**（中文怎么输入、焦点、布局坑）

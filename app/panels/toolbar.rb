@@ -2,6 +2,7 @@
 
 require "citrine"
 require_relative "common"
+require_relative "../tokens"
 
 module Sheets
   module Panels
@@ -27,9 +28,9 @@ module Sheets
             box(css_class: "tb-group", direction: :row, gap: 6) do
               chip("B 加粗", false, -> { app.apply_chrome(bold: true) }, "chip-bold")
               chip("常规", false, -> { app.apply_chrome(bold: false) })
-              chip("底色", false, -> { app.apply_chrome(bg: "#3a2f14") }, "swatch swatch-amber")
-              chip("底色", false, -> { app.apply_chrome(bg: "#12351f") }, "swatch swatch-green")
-              chip("底色", false, -> { app.apply_chrome(bg: "#3a1a22") }, "swatch swatch-red")
+              chip("底色", false, -> { app.apply_chrome(bg: Tokens[:swatch_amber]) }, "swatch swatch-amber")
+              chip("底色", false, -> { app.apply_chrome(bg: Tokens[:swatch_green]) }, "swatch swatch-green")
+              chip("底色", false, -> { app.apply_chrome(bg: Tokens[:swatch_red]) }, "swatch swatch-red")
               chip("无底色", false, -> { app.apply_chrome(bg: nil) })
             end
 

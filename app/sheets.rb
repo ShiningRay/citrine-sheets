@@ -12,10 +12,17 @@
 # 共享对象通信。随 citrine PR #15 落地组件嵌套后，这些都回到了组件树里。
 require "native"
 require "citrine/browser"
+require_relative "tokens"
 require_relative "telemetry"
 require_relative "application"
 require_relative "seed"
 require_relative "test_api"
+
+# 设计令牌注入：app/tokens.rb 是唯一来源（原生 native/theme.rb 也从它派生），
+# 这里在挂载前把 :root 变量写进页面，app/styles.css 的规则全部经 var(--x) 引用。
+token_style = `document.createElement("style")`
+`#{token_style}.textContent = #{Sheets::Tokens.css_root_block}`
+`document.head.appendChild(#{token_style})`
 
 Sheets::Telemetry.install!
 

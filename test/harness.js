@@ -59,6 +59,8 @@ function boot() {
   global.document = {
     getElementById: (id) => roots[id] || null,
     createElement: (t) => makeEl(t),
+    // 入口的令牌注入（tokens.rb → <style>:root）会 appendChild 到 head
+    head: makeEl("head"),
     activeElement: null,
     body: body,
     querySelectorAll: (sel) => {
