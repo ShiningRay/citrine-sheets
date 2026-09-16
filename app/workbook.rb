@@ -42,8 +42,8 @@ module Sheets
       @chrome = {}      # [row, col] => { bold:, bg:, decimals: }
       @value_signals = {}
       @chrome_signals = {}
-      @undo = []
-      @redo = []
+      @undo = Citrine.signal_list([])   # F9：集合态用 ListSignal（push_bounded 封顶 + 变更即通知）
+      @redo = Citrine.signal_list([])
       @edit_seq = 0
       @last_recalc = empty_report
       @recalc_signal = signal(@last_recalc)
@@ -170,6 +170,7 @@ module Sheets
         row: row, col: col,
         bold: style[:bold] ? true : false,
         bg: style[:bg],
+        decimals: style[:decimals],
         error: error?(row, col),
         kind: kind(row, col)
       }
@@ -263,7 +264,9 @@ module Sheets
       return nil if @undo.empty?
 
       @redo << capture
-      restore(@undo.pop)
+      entry = @undo.last
+      @undo.delete_at(@undo.size - 1)
+      restore(entry)
       :undo
     end
 
@@ -271,7 +274,9 @@ module Sheets
       return nil if @redo.empty?
 
       @undo << capture
-      restore(@redo.pop)
+      entry = @redo.last
+      @redo.delete_at(@redo.size - 1)
+      restore(entry)
       :redo
     end
 
@@ -289,9 +294,8 @@ module Sheets
     private
 
     def push_undo
-      @undo << capture
-      @undo.shift while @undo.size > UNDO_LIMIT
-      @redo.clear
+      @undo.push_bounded(capture, UNDO_LIMIT)
+      @redo.replace([])
       @edit_seq += 1
     end
 

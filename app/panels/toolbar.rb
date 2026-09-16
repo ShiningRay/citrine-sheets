@@ -26,19 +26,29 @@ module Sheets
             end
 
             box(css_class: "tb-group", direction: :row, gap: 6) do
-              chip("B 加粗", false, -> { app.apply_chrome(bold: true) }, "chip-bold")
-              chip("常规", false, -> { app.apply_chrome(bold: false) })
-              chip("底色", false, -> { app.apply_chrome(bg: Tokens[:swatch_amber]) }, "swatch swatch-amber")
-              chip("底色", false, -> { app.apply_chrome(bg: Tokens[:swatch_green]) }, "swatch swatch-green")
-              chip("底色", false, -> { app.apply_chrome(bg: Tokens[:swatch_red]) }, "swatch swatch-red")
-              chip("无底色", false, -> { app.apply_chrome(bg: nil) })
+              chip("B 加粗", -> { app.chrome_flag?(:bold) },
+                   -> { app.apply_chrome(bold: true) }, "chip-bold")
+              chip("常规", -> { app.chrome_flag?(:bold, false) },
+                   -> { app.apply_chrome(bold: false) })
+              chip("底色", -> { app.chrome_flag?(:bg, Tokens[:swatch_amber]) },
+                   -> { app.apply_chrome(bg: Tokens[:swatch_amber]) }, "swatch swatch-amber")
+              chip("底色", -> { app.chrome_flag?(:bg, Tokens[:swatch_green]) },
+                   -> { app.apply_chrome(bg: Tokens[:swatch_green]) }, "swatch swatch-green")
+              chip("底色", -> { app.chrome_flag?(:bg, Tokens[:swatch_red]) },
+                   -> { app.apply_chrome(bg: Tokens[:swatch_red]) }, "swatch swatch-red")
+              chip("无底色", -> { app.chrome_flag?(:bg, nil) },
+                   -> { app.apply_chrome(bg: nil) })
             end
 
             box(css_class: "tb-group", direction: :row, gap: 6) do
-              chip("自动", false, -> { app.apply_chrome(decimals: nil) })
-              chip("0 位", false, -> { app.apply_chrome(decimals: 0) })
-              chip("2 位", false, -> { app.apply_chrome(decimals: 2) })
-              chip("4 位", false, -> { app.apply_chrome(decimals: 4) })
+              chip("自动", -> { app.chrome_flag?(:decimals, nil) },
+                   -> { app.apply_chrome(decimals: nil) })
+              chip("0 位", -> { app.chrome_flag?(:decimals, 0) },
+                   -> { app.apply_chrome(decimals: 0) })
+              chip("2 位", -> { app.chrome_flag?(:decimals, 2) },
+                   -> { app.apply_chrome(decimals: 2) })
+              chip("4 位", -> { app.chrome_flag?(:decimals, 4) },
+                   -> { app.apply_chrome(decimals: 4) })
             end
 
             box(css_class: "tb-group", direction: :row, gap: 6) do

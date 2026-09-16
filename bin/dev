@@ -11,6 +11,7 @@
 root = File.expand_path("..", __dir__)
 citrine_root = ENV["CITRINE_ROOT"] || File.expand_path("../citrine", root)
 lib = File.join(citrine_root, "lib")
+beryl_lib = ENV["BERYL_PATH"] || File.expand_path("../beryl/lib", root)
 
 unless File.directory?(lib)
   abort <<~MSG
@@ -21,4 +22,4 @@ unless File.directory?(lib)
 end
 
 require File.join(lib, "citrine/dev_server")
-Citrine::DevServer.run!([File.join(root, "app"), "-p", "4404", *ARGV])
+Citrine::DevServer.run!([File.join(root, "app"), "-I", beryl_lib, "-p", "4404", *ARGV])

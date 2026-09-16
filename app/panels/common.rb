@@ -46,11 +46,24 @@ module Sheets
 
       # key 用于"身份稳定的重复结构"（如依赖标签列表）：给了 key 的节点会按 key 复用，
       # 列表重排/增删时不换 DOM 节点，也就不会丢事件、丢焦点、丢输入法状态。
+      # chip：语义上是按钮——走 Beryl::Button（kind/size/disabled 契约统一），
+      # 保留 chip/is-on 类名：样式与桩断言（按 .chip 类 + 文本找节点）零改动。
+      # active 传 Proc 时为响应式激活态：class 在本节点的属性 Effect 里现求值
+      # （换选中 / 改格式只重设 class，不重建工具条）。
+      # 必须经 render()（keyed 组件槽位）而不是 .new().view：后者每次父重渲染都
+      # 新建实例，元素 owner 随之更换，keyed/位置复用全部失效（依赖标签的
+      # DOM 身份断言抓过这一笔）。
       def chip(text, active, handler, extra_class = nil, key: nil)
-        classes = ["chip"]
-        classes << "is-on" if active
-        classes << extra_class if extra_class
-        button(on_click: handler, css_class: classes.join(" "), key: key) { text }
+        extra = extra_class ? [extra_class] : []
+        if active.is_a?(Proc)
+          render(Beryl::Button, text: text, kind: :ghost, size: :sm,
+                                css_class: -> { ["chip", active.call ? "is-on" : nil].concat(extra).compact.join(" ") },
+                                on_click: handler, key: key)
+        else
+          render(Beryl::Button, text: text, kind: :ghost, size: :sm,
+                                css_class: ["chip", active ? "is-on" : nil].concat(extra).compact.join(" "),
+                                on_click: handler, key: key)
+        end
       end
 
       def kv(label_text, value_text, value_class = nil)

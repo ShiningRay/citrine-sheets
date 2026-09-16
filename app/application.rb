@@ -48,6 +48,7 @@ module Sheets
       @edit_text = own_signal("")
       @edit_mode = own_signal(false)
       @notice = own_signal({ kind: :info, text: "点选单元格或直接输入；方向键移动，Enter 编辑，Esc 取消" })
+      @toasts = Citrine.signal_list([])   # 瞬时通知队列（auto_dismiss 到期自删，F9 封顶）
       @recalc_view = own_signal({ computed: 0, cells: 0, cyclic: 0, elapsed: 0, label: "尚未编辑" })
       @last_action = own_signal("就绪")
       @mount_ms = own_signal(0)
@@ -73,6 +74,7 @@ module Sheets
           end
         end
         status_bar(app: self)
+        toast_stack
       end
     end
 
@@ -106,6 +108,13 @@ module Sheets
 
     def active_key
       Format.cell_key(@r2, @c2)
+    end
+
+    # 活动格的 chrome 读数（工具栏 chip 激活态用）：读选区信号切换订阅目标，
+    # 读 chrome 信号让本格格式变化即时反映到 is-on
+    def chrome_flag?(key, value = true)
+      state = selection.get
+      @workbook.chrome_signal(state[:ar], state[:ac]).get[key] == value
     end
 
     def range_label
@@ -430,9 +439,21 @@ module Sheets
       clamp(col, 0, @workbook.cols - 1)
     end
 
+    # 瞬时通知：镜像写进 @notice（test_state_text / 调试读数用），渲染走 toast 堆叠
+    TOAST_KINDS = { info: "info", warn: "warn" }.freeze
+
     def notice!(kind, text)
       @notice.set({ kind: kind, text: text })
+      @toasts.push_bounded({ "kind" => TOAST_KINDS.fetch(kind, "info"), "text" => text }, 4)
       self
+    end
+
+    # 右下角 toast 堆叠：ListSignal 快照枚举 + 到期按序号删（beryl demo 同款）
+    def toast_stack
+      @toasts.each_with_index do |t, i|
+        Beryl::Toast.new(msg: t["text"], kind: t["kind"], duration_ms: 3500,
+                         on_expire: -> { @toasts.delete_at(i) }).view
+      end
     end
 
     public

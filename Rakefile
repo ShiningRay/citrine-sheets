@@ -17,7 +17,9 @@ CITRINE_ROOT = ENV["CITRINE_ROOT"] || File.expand_path("../citrine", ROOT)
 CITRINE_LIB = File.join(CITRINE_ROOT, "lib")
 
 OPAL = ENV["OPAL"] || "opal"
-TMP = ENV["TMPDIR"] || "/tmp"
+BERYL_LIB = ENV.fetch("BERYL_PATH", File.expand_path("../beryl/lib", __dir__))
+require "tmpdir"
+TMP = ENV["TMPDIR"] || Dir.tmpdir   # "/tmp" 在 Windows 上不存在（parity 输出路径）
 
 def check_citrine!
   return if File.directory?(CITRINE_LIB)
@@ -40,7 +42,7 @@ desc "编译 app/sheets.rb → app/sheets.js"
 task :build do
   check_citrine!
   Dir.chdir(APP) do
-    sh "#{OPAL} -c -I#{CITRINE_LIB} -I. -o sheets.js sheets.rb"
+    sh "#{OPAL} -c -I#{CITRINE_LIB} -I#{BERYL_LIB} -I. -o sheets.js sheets.rb"
   end
 end
 

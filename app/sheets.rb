@@ -12,6 +12,7 @@
 # 共享对象通信。随 citrine PR #15 落地组件嵌套后，这些都回到了组件树里。
 require "native"
 require "citrine/browser"
+require "beryl"
 require_relative "tokens"
 require_relative "telemetry"
 require_relative "application"
