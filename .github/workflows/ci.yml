@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CITRINE_ROOT: ${{ github.workspace }}/citrine
+
+jobs:
+  check:
+    name: 单测 + Node 桩 + 跨平台一致
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: 检出 citrine 内核（CITRINE_ROOT 依赖）
+        uses: actions/checkout@v7
+        with:
+          repository: ShiningRay/citrine
+          path: citrine
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: 安装 opal（本仓无 Gemfile，直接装 gem）
+        run: gem install opal -v "~> 1.8"
+      - name: CRuby 内核单测（公式解析 / 求值 / 函数 / 工作簿 / 依赖图）
+        run: rake test
+      - name: 编译 + Node DOM 桩验收
+        run: rake stubs
+      - name: CRuby 与 Opal 两侧内核输出逐字节比对
+        run: rake parity
