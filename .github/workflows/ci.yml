@@ -11,6 +11,7 @@ concurrency:
 
 env:
   CITRINE_ROOT: ${{ github.workspace }}/citrine
+  BERYL_PATH: ${{ github.workspace }}/beryl/lib
 
 jobs:
   check:
@@ -23,6 +24,11 @@ jobs:
         with:
           repository: ShiningRay/citrine
           path: citrine
+      - name: 检出 beryl 组件库（BERYL_PATH 依赖）
+        uses: actions/checkout@v7
+        with:
+          repository: ShiningRay/beryl
+          path: beryl
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
